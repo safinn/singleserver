@@ -21,3 +21,15 @@ func TestVerifyWebhookSignature(t *testing.T) {
 		t.Fatal("bad signature verified")
 	}
 }
+
+func TestDeployTokenIgnoresLegacyStaticToken(t *testing.T) {
+	t.Setenv("SINGLESERVER_GITHUB_TOKEN", "legacy-token")
+
+	_, err := NewGitHubClient(t.TempDir()).DeployToken(0)
+	if err == nil {
+		t.Fatal("expected missing installation id")
+	}
+	if err.Error() != "missing installation id" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

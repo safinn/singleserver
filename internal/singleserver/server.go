@@ -1,7 +1,6 @@
 package singleserver
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -24,7 +23,6 @@ type Server struct {
 	setupToken    string
 	github        *GitHubClient
 	deployManager *DeployManager
-	syncedHooks   map[string]bool
 }
 
 type PushPayload struct {
@@ -51,7 +49,6 @@ func Run(logger *log.Logger) error {
 		setupToken:    os.Getenv("SINGLESERVER_SETUP_TOKEN"),
 		github:        github,
 		deployManager: NewDeployManager(logger, github),
-		syncedHooks:   map[string]bool{},
 	}
 
 	mux := http.NewServeMux()
@@ -59,10 +56,6 @@ func Run(logger *log.Logger) error {
 	mux.HandleFunc("GET /setup/github-app", server.handleSetupGitHubApp)
 	mux.HandleFunc("GET /setup/callback", server.handleSetupCallback)
 	mux.HandleFunc("POST /github/webhook", server.handleGitHubWebhook)
-
-	ctx, stopSync := context.WithCancel(context.Background())
-	defer stopSync()
-	go server.syncWebhooksLoop(ctx)
 
 	httpServer := &http.Server{
 		Addr:              "127.0.0.1:" + envDefault("SINGLESERVER_PORT", "8787"),
@@ -223,50 +216,6 @@ func (s *Server) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setupAllowed(r *http.Request) bool {
 	return s.setupToken != "" && r.URL.Query().Get("token") == s.setupToken
-}
-
-func (s *Server) syncWebhooksLoop(ctx context.Context) {
-	s.syncWebhooks()
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.syncWebhooks()
-		}
-	}
-}
-
-func (s *Server) syncWebhooks() {
-	token := s.github.StaticToken()
-	if token == "" {
-		return
-	}
-	webhookSecret, err := s.github.WebhookSecret()
-	if err != nil {
-		s.logger.Printf("[webhooks] skipped: %v", err)
-		return
-	}
-	config, err := LoadConfig(s.configPath)
-	if err != nil {
-		s.logger.Printf("[webhooks] config load failed: %v", err)
-		return
-	}
-	webhookURL := s.publicURL + "/github/webhook"
-	for _, app := range config.Apps {
-		if s.syncedHooks[app.Repo] {
-			continue
-		}
-		action, err := s.github.SyncRepositoryWebhook(app.Repo, webhookURL, webhookSecret, token)
-		if err != nil {
-			s.logger.Printf("[webhooks] %s failed: %v", app.Repo, err)
-			continue
-		}
-		s.syncedHooks[app.Repo] = true
-		s.logger.Printf("[webhooks] %s %s", app.Repo, action)
-	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

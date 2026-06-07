@@ -31,16 +31,6 @@ type GitHubAppSecrets struct {
 	WebhookSecret string `json:"webhook_secret"`
 }
 
-type RepositoryHook struct {
-	ID     int64    `json:"id"`
-	Name   string   `json:"name"`
-	Active bool     `json:"active"`
-	Events []string `json:"events"`
-	Config struct {
-		URL string `json:"url"`
-	} `json:"config"`
-}
-
 type InstallationToken struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -92,10 +82,6 @@ func VerifyWebhookSignature(secret string, body []byte, signature string) bool {
 	return hmac.Equal([]byte(expected), []byte(strings.TrimSpace(signature)))
 }
 
-func (c *GitHubClient) StaticToken() string {
-	return strings.TrimSpace(os.Getenv("SINGLESERVER_GITHUB_TOKEN"))
-}
-
 func (c *GitHubClient) WebhookSecret() (string, error) {
 	webhookSecretFromEnv := strings.TrimSpace(os.Getenv("SINGLESERVER_WEBHOOK_SECRET"))
 	if webhookSecretFromEnv != "" {
@@ -138,9 +124,6 @@ func (c *GitHubClient) LoadSecrets() (*GitHubAppSecrets, error) {
 }
 
 func (c *GitHubClient) DeployToken(installationID int64) (string, error) {
-	if token := c.StaticToken(); token != "" {
-		return token, nil
-	}
 	if installationID == 0 {
 		return "", errors.New("missing installation id")
 	}
@@ -247,47 +230,6 @@ func (c *GitHubClient) CommitSHA(repo string, ref string, token string) (string,
 		return "", errors.New("commit sha is missing")
 	}
 	return commit.SHA, nil
-}
-
-func (c *GitHubClient) SyncRepositoryWebhook(repo string, webhookURL string, webhookSecret string, token string) (string, error) {
-	if token == "" {
-		return "", errors.New("github token is required to sync webhooks")
-	}
-	if webhookURL == "" {
-		return "", errors.New("webhook url is required")
-	}
-	if webhookSecret == "" {
-		return "", errors.New("webhook secret is required")
-	}
-
-	var hooks []RepositoryHook
-	if err := c.request("GET", fmt.Sprintf("/repos/%s/hooks", repo), "Bearer "+token, nil, &hooks); err != nil {
-		return "", err
-	}
-
-	payload := map[string]any{
-		"name":   "web",
-		"active": true,
-		"events": []string{"push"},
-		"config": map[string]string{
-			"url":          webhookURL,
-			"content_type": "json",
-			"secret":       webhookSecret,
-			"insecure_ssl": "0",
-		},
-	}
-	for _, hook := range hooks {
-		if hook.Name == "web" && hook.Config.URL == webhookURL {
-			if err := c.request("PATCH", fmt.Sprintf("/repos/%s/hooks/%d", repo, hook.ID), "Bearer "+token, payload, nil); err != nil {
-				return "", err
-			}
-			return "updated", nil
-		}
-	}
-	if err := c.request("POST", fmt.Sprintf("/repos/%s/hooks", repo), "Bearer "+token, payload, nil); err != nil {
-		return "", err
-	}
-	return "created", nil
 }
 
 func (c *GitHubClient) ConvertManifestCode(code string) (*GitHubAppSecrets, string, error) {
