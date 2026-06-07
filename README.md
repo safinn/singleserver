@@ -4,6 +4,9 @@ Single Server is a tiny deploy daemon for running many small apps on one server.
 
 It receives GitHub App `push` webhooks, checks a central allowlist, fetches the exact pushed SHA, and runs Kamal on the host.
 
+For the intended user experience and roadmap, see
+[Working Backwards: The Single Server User Experience](docs/working-backwards.md).
+
 ## Naming
 
 The product name is **Single Server**. The repository and service slug are `singleserver`, matching `singleserver.com`.
