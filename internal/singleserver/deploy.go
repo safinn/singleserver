@@ -68,9 +68,9 @@ func (m *DeployManager) run(req DeployRequest) {
 	start := time.Now()
 	m.logger.Printf("[deploy:%s] start %s@%s (%s) -> %s", req.RunID, req.Repo, req.SHA, req.Branch, req.App.Name)
 
-	token, err := m.github.InstallationToken(req.InstallationID)
+	token, err := m.github.DeployToken(req.InstallationID)
 	if err != nil {
-		m.logger.Printf("[deploy:%s] failed to mint installation token: %v", req.RunID, err)
+		m.logger.Printf("[deploy:%s] failed to get GitHub token: %v", req.RunID, err)
 		return
 	}
 

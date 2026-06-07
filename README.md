@@ -47,8 +47,11 @@ Required environment:
 SINGLESERVER_CONFIG=/etc/singleserver/apps.yml
 SINGLESERVER_PORT=8787
 SINGLESERVER_PUBLIC_URL=https://hooks.singleserver.com
-SINGLESERVER_SETUP_TOKEN=...
+SINGLESERVER_WEBHOOK_SECRET=...
+SINGLESERVER_GITHUB_TOKEN=...
 ```
+
+With `SINGLESERVER_GITHUB_TOKEN` set, the daemon creates or updates matching repo webhooks for every app in `apps.yml` on startup and once per minute.
 
 ## GitHub App
 
