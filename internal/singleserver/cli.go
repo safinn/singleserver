@@ -30,6 +30,8 @@ func RunCLI(args []string, logger *log.Logger) error {
 		return cliDeploy(args[1:], logger)
 	case "render-deploy":
 		return cliRenderDeploy(args[1:], os.Stdout)
+	case "doctor":
+		return cliDoctor(os.Stdout)
 	case "logs":
 		return cliLogs(args[1:], os.Stdout)
 	default:
@@ -45,6 +47,7 @@ Usage:
   singleserver status
   singleserver deploy <owner/repo> [ref]
   singleserver render-deploy <owner/repo>
+  singleserver doctor
   singleserver logs [app]
 
 Commands:
@@ -52,6 +55,7 @@ Commands:
   status         Check the local daemon and configured healthchecks.
   deploy         Deploy a configured app immediately.
   render-deploy  Print the generated Kamal deploy.yml for a configured app.
+  doctor         Check config, GitHub App access, checkouts, deploy logs, and healthchecks.
   logs           Show recent Single Server journal logs, optionally filtered by app.
 `)
 }
