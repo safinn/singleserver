@@ -552,6 +552,7 @@
                     <p class="option-heading">Options for <code>singleserver github connect</code></p>
                     <ul class="option-list">
                         <li><code>--name &lt;name&gt;</code><span>Use a custom GitHub App display name, useful for test servers or branded installs.</span></li>
+                        <li><code>--public</code><span>Create a public/installable GitHub App manifest so the app can be installed under multiple GitHub owners or organizations.</span></li>
                     </ul>
                 </div>
             </div>
@@ -818,6 +819,7 @@
             <li><strong><code>SINGLESERVER_PUBLIC_URL</code></strong><span><span class="setting-default">Managed by <code>init</code>.</span> Public URL used in GitHub webhook setup, normally <code>https://hooks.&lt;zone&gt;</code>.</span></li>
             <li><strong><code>SINGLESERVER_SETUP_TOKEN</code></strong><span><span class="setting-default">Managed by <code>init</code>.</span> Token used to protect provider setup pages while GitHub and Cloudflare are being connected.</span></li>
             <li><strong><code>SINGLESERVER_GITHUB_APP_NAME</code></strong><span><span class="setting-default">Default: <code>Single Server</code>.</span> GitHub App display name used by the setup page.</span></li>
+            <li><strong><code>SINGLESERVER_GITHUB_APP_PUBLIC</code></strong><span><span class="setting-default">Default: private app.</span> Set by <code>singleserver github connect --public</code> when the GitHub App needs to be installable under multiple owners.</span></li>
         </ul>
 
         <h3><a href="#kamal-defaults">Generated Kamal Defaults</a></h3>

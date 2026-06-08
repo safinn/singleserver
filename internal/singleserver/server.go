@@ -157,11 +157,12 @@ func (s *Server) handleSetupGitHubApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	appName := envDefault("SINGLESERVER_GITHUB_APP_NAME", "Single Server")
+	publicApp := githubAppPublicFromEnv()
 	manifest := map[string]any{
 		"name":        appName,
 		"url":         "https://singleserver.com",
 		"description": "Deploy many small apps from GitHub to one server.",
-		"public":      false,
+		"public":      publicApp,
 		"hook_attributes": map[string]any{
 			"url":    s.publicURL + "/github/webhook",
 			"active": true,
@@ -180,12 +181,28 @@ func (s *Server) handleSetupGitHubApp(w http.ResponseWriter, r *http.Request) {
 <meta charset="utf-8">
 <title>Single Server GitHub App Setup</title>
 <h1>Single Server GitHub App Setup</h1>
-<p>This registers a private GitHub App named <strong>%s</strong>.</p>
+<p>This registers a %s GitHub App named <strong>%s</strong>.</p>
 <form action="https://github.com/settings/apps/new?state=%s" method="post">
   <input type="hidden" name="manifest" value="%s">
   <button type="submit">Create GitHub App</button>
 </form>
-`, html.EscapeString(appName), html.EscapeString(state), html.EscapeString(string(manifestJSON)))
+`, html.EscapeString(githubAppVisibilityLabel(publicApp)), html.EscapeString(appName), html.EscapeString(state), html.EscapeString(string(manifestJSON)))
+}
+
+func githubAppPublicFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SINGLESERVER_GITHUB_APP_PUBLIC"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func githubAppVisibilityLabel(publicApp bool) string {
+	if publicApp {
+		return "public"
+	}
+	return "private"
 }
 
 func (s *Server) handleSetupCallback(w http.ResponseWriter, r *http.Request) {

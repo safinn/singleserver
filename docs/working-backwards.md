@@ -136,6 +136,12 @@ installs the Single Server GitHub App with the minimum permissions:
 
 The user should install the app on all repositories or selected repositories.
 Single Server should still treat `apps.yml` as the deployment allowlist.
+If deployable repositories live under multiple GitHub owners, the repair command
+should support a public/installable app:
+
+```sh
+singleserver github connect --public
+```
 
 After the browser approval, the CLI should write:
 
@@ -416,7 +422,7 @@ Status key:
 | `singleserver doctor` | Built | Checks daemon, config, Docker, disk, Cloudflare Tunnel, DNS, stale routes, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. |
 | Installer script | Built | `https://singleserver.com/install.sh` installs Docker, Kamal, cloudflared, the hosted Single Server binary, the systemd service, local registry, base config, and runs `init`. Source builds remain available as an explicit fallback. |
 | `singleserver init` | Built | Creates base host state, connects Cloudflare when a token is present, restarts the daemon, prints the GitHub App setup URL, runs `doctor`, and reports GitHub setup as pending until browser approval is completed. |
-| `singleserver github connect` | Built | Repair command that prints the GitHub App setup URL and can set a custom GitHub App display name. |
+| `singleserver github connect` | Built | Repair command that prints the GitHub App setup URL, can set a custom GitHub App display name, and can create a public/installable app for multi-owner repo setups. |
 | DNS provider integration | Built | Cloudflare DNS and Cloudflare Tunnel are first-class for webhook and app routes. |
 | Ingress setup | Built | The installer and `cloudflare connect` set up host-level cloudflared and keep tunnel config aligned with `apps.yml`. |
 | App domain management | Built | Add/remove/list/verify hosts after app creation; add/remove deploy by default and support `--no-deploy`. |

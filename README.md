@@ -157,6 +157,11 @@ singleserver backup fullsend
 singleserver restore fullsend 20260608T181500Z --yes
 ```
 
+`singleserver github connect --public` creates a public/installable GitHub App
+manifest for setups that deploy repositories under more than one GitHub owner.
+Without `--public`, the setup flow creates a private GitHub App for the owner
+that creates it.
+
 `singleserver add <github-url>` validates GitHub App access, checks the repo's
 default branch and `Dockerfile`, appends the normalized `owner/repo` to
 `/etc/singleserver/apps.yml`, validates the generated Kamal config, deploys the

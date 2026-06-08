@@ -53,11 +53,12 @@ func cliGitHubConnect(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("github connect", flag.ContinueOnError)
 	fs.SetOutput(w)
 	appName := fs.String("name", "", "GitHub App name")
+	publicApp := fs.Bool("public", false, "create a public GitHub App that can be installed under multiple owners")
 	if err := fs.Parse(normalizeFlagArgs(args, githubFlagTakesValue)); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver github connect [--name \"Single Server\"]")
+		return errors.New("usage: singleserver github connect [--name \"Single Server\"] [--public]")
 	}
 	if err := ensureBaseFiles(); err != nil {
 		return err
@@ -83,6 +84,16 @@ func cliGitHubConnect(args []string, w io.Writer) error {
 	}
 	if strings.TrimSpace(*appName) != "" {
 		env["SINGLESERVER_GITHUB_APP_NAME"] = strings.TrimSpace(*appName)
+		if err := writeServiceEnv(env); err != nil {
+			return err
+		}
+	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "public" && *publicApp {
+			env["SINGLESERVER_GITHUB_APP_PUBLIC"] = "true"
+		}
+	})
+	if *publicApp {
 		if err := writeServiceEnv(env); err != nil {
 			return err
 		}
