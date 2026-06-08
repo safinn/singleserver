@@ -353,13 +353,13 @@
 
     <section>
         <h2><a href="#flow">What happens next</a></h2>
-        <p>GitHub is the trigger. Your server fetches the pushed commit, builds it locally, and lets Kamal move traffic only after the new container passes its healthcheck.</p>
+        <p>GitHub is the trigger. Your server fetches the pushed commit, builds it locally, and hands it to Kamal for a zero-downtime deployment.</p>
 
         <div class="flow-box" id="flow">
             <div class="flow-row">
                 <span class="pill">git push</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">GitHub sends one signed webhook</span>
+                <span class="result">GitHub notifies Single Server</span>
             </div>
             <div class="flow-row">
                 <span class="pill">build</span>
@@ -369,7 +369,7 @@
             <div class="flow-row">
                 <span class="pill">live</span>
                 <span class="connector">&rarr;</span>
-                <span class="result">Kamal healthchecks the new container, swaps traffic, and reports status to GitHub</span>
+                <span class="result">Kamal rolls it out with zero downtime</span>
             </div>
         </div>
     </section>
