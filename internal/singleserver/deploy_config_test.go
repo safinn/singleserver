@@ -1,6 +1,7 @@
 package singleserver
 
 import (
+	"runtime"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -27,6 +28,10 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 	}
 	if config["image"] != "userbase-homepage" {
 		t.Fatalf("unexpected image: %v", config["image"])
+	}
+	builder := config["builder"].(map[string]any)
+	if builder["arch"] != runtime.GOARCH {
+		t.Fatalf("unexpected builder arch: %v", builder["arch"])
 	}
 
 	proxy := config["proxy"].(map[string]any)

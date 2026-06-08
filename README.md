@@ -82,7 +82,7 @@ service/image:      app name
 server host:        127.0.0.1
 ssh user/key:       deploy, ~/.ssh/id_ed25519
 registry:           127.0.0.1:5555
-builder:            local amd64 Docker builder
+builder:            local Docker builder for the server architecture
 proxy app_port:     80
 proxy ssl:          false
 proxy healthcheck:  /up
@@ -176,8 +176,10 @@ that creates it.
 default branch and `Dockerfile`, appends the normalized `owner/repo` to
 `/etc/singleserver/apps.yml`, validates the generated Kamal config, deploys the
 current branch tip, and runs `doctor` afterward. When Cloudflare is connected
-and no host is provided, the default app domain is `<app>.<zone>`. Pass
-`--no-deploy` to configure the app and wait for the next push or manual deploy.
+and no host is provided, the default app domain is a DNS-safe app label plus the
+connected zone, such as `my-app.example.com` or `singleserver-com.example.com`.
+Pass `--no-deploy` to configure the app and wait for the next push or manual
+deploy.
 
 `singleserver deploy <owner/repo> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
 

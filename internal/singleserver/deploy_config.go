@@ -2,6 +2,7 @@ package singleserver
 
 import (
 	"bytes"
+	"runtime"
 
 	"gopkg.in/yaml.v3"
 )
@@ -93,7 +94,7 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 			Password: "dummy",
 		},
 		Builder: kamalBuilder{
-			Arch:    "amd64",
+			Arch:    runtime.GOARCH,
 			Local:   true,
 			Driver:  "docker",
 			Context: ".",
