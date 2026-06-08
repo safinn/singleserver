@@ -406,17 +406,60 @@ func verifyDomains(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	failed := false
-	for _, app := range config.Apps {
-		if len(args) == 1 && !appMatches(app, args[0]) {
-			continue
+	apps := config.Apps
+	if len(args) == 1 {
+		apps = nil
+		for _, app := range config.Apps {
+			if appMatches(app, args[0]) {
+				apps = []AppConfig{app}
+				break
+			}
 		}
+		if len(apps) == 0 {
+			return fmt.Errorf("%s is not configured", args[0])
+		}
+	}
+
+	state, err := loadCloudflareState()
+	if err != nil {
+		return err
+	}
+	routes := map[string]string{}
+	failed := false
+	if state.TunnelID == "" {
+		if appsHaveHosts(apps) {
+			fmt.Fprintln(w, "cloudflare\tfailed\tconnect Cloudflare first with `singleserver cloudflare connect`")
+			failed = true
+		}
+	} else if state.ConfigFile == "" {
+		fmt.Fprintln(w, "cloudflare\troutes\tfailed\tmissing config file")
+		failed = true
+	} else {
+		cloudflaredConfig, err := readCloudflaredConfig(state.ConfigFile)
+		if err != nil {
+			fmt.Fprintf(w, "cloudflare\troutes\tfailed\t%s\n", err)
+			failed = true
+		} else {
+			routes = cloudflaredRoutes(cloudflaredConfig)
+		}
+	}
+
+	for _, app := range apps {
 		for _, host := range app.Hosts {
 			if err := commandRun(5*time.Second, "getent", "hosts", host); err != nil {
 				fmt.Fprintf(w, "%s\tdns\tfailed\t%s\t%s\n", app.Name, host, err)
 				failed = true
 			} else {
 				fmt.Fprintf(w, "%s\tdns\tok\t%s\n", app.Name, host)
+			}
+			if state.TunnelID == "" || state.ConfigFile == "" {
+				continue
+			}
+			if service := routes[strings.ToLower(host)]; service == "" {
+				fmt.Fprintf(w, "%s\ttunnel_route\tfailed\t%s missing from %s\n", app.Name, host, state.ConfigFile)
+				failed = true
+			} else {
+				fmt.Fprintf(w, "%s\ttunnel_route\tok\t%s -> %s\n", app.Name, host, service)
 			}
 		}
 	}
