@@ -332,6 +332,49 @@ func TestRemoveDeleteStorageRequiresConfirmation(t *testing.T) {
 	}
 }
 
+func TestRemoveKeepsConfigWhenCloudflareFails(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_STATE_DIR", dir)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    hosts:
+      - play.nobrainer.host
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalSync := syncCloudflareAppDomainFunc
+	t.Cleanup(func() { syncCloudflareAppDomainFunc = originalSync })
+	syncCloudflareAppDomainFunc = func(hostname string, add bool, w io.Writer) error {
+		if !add {
+			return errors.New("cloudflare unavailable")
+		}
+		return nil
+	}
+
+	var out bytes.Buffer
+	err := cliRemove([]string{"fullsend"}, &out)
+	if err == nil {
+		t.Fatal("expected Cloudflare error")
+	}
+	if !strings.Contains(err.Error(), "cloudflare unavailable") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out.String(), "config\tok\tremoved") {
+		t.Fatalf("unexpected removal output: %s", out.String())
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Apps) != 1 || config.Apps[0].Repo != "dvassallo/fullsend" {
+		t.Fatalf("expected app config kept, got %#v", config.Apps)
+	}
+}
+
 func TestRemoveDeleteStorageWithConfirmation(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")

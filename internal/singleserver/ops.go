@@ -216,16 +216,26 @@ func cliRemove(args []string, w io.Writer) error {
 	if index < 0 {
 		return fmt.Errorf("%s is not configured", appName)
 	}
+
+	removedHosts := []string{}
+	for _, host := range app.Hosts {
+		if err := syncCloudflareAppDomainFunc(host, false, w); err != nil {
+			for _, removedHost := range removedHosts {
+				_ = syncCloudflareAppDomainFunc(removedHost, true, io.Discard)
+			}
+			return err
+		}
+		removedHosts = append(removedHosts, host)
+	}
+
 	config.Apps = append(config.Apps[:index], config.Apps[index+1:]...)
 	if err := writeConfig(configPath, config); err != nil {
+		for _, removedHost := range removedHosts {
+			_ = syncCloudflareAppDomainFunc(removedHost, true, io.Discard)
+		}
 		return err
 	}
 	fmt.Fprintf(w, "%s\tconfig\tok\tremoved from %s\n", app.Name, configPath)
-	for _, host := range app.Hosts {
-		if err := syncCloudflareAppDomain(host, false, w); err != nil {
-			return err
-		}
-	}
 	if err := stopAppContainers(app.Name); err != nil {
 		fmt.Fprintf(w, "%s\tcontainers\tfailed\t%s\n", app.Name, err)
 	} else {
