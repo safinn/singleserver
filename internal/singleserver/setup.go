@@ -115,6 +115,12 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	if fs.NArg() != 0 {
 		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]")
 	}
+	tunnelNameSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "tunnel" {
+			tunnelNameSet = true
+		}
+	})
 
 	state, err := loadCloudflareState()
 	if err != nil {
@@ -134,10 +140,7 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	state.AccountID = zone.Account.ID
 	state.ZoneID = zone.ID
 	state.ZoneName = zone.Name
-	state.TunnelName = strings.TrimSpace(*tunnelName)
-	if state.TunnelName == "" {
-		state.TunnelName = "singleserver"
-	}
+	applyCloudflareTunnelName(state, *tunnelName, tunnelNameSet)
 	if strings.TrimSpace(*hookHost) != "" {
 		state.HookHost = strings.TrimSpace(*hookHost)
 	}
@@ -212,6 +215,23 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	_ = commandRun(10*time.Second, "systemctl", "enable", "--now", "cloudflared-singleserver.service")
 	fmt.Fprintf(w, "cloudflare\tdns\tok\t%s -> %s.cfargotunnel.com\n", state.HookHost, state.TunnelID)
 	return nil
+}
+
+func applyCloudflareTunnelName(state *CloudflareState, requestedName string, requestedExplicitly bool) {
+	name := strings.TrimSpace(requestedName)
+	if name == "" {
+		name = "singleserver"
+	}
+	existingName := strings.TrimSpace(state.TunnelName)
+	switch {
+	case existingName != "" && !strings.EqualFold(existingName, name):
+		state.TunnelID = ""
+		state.TunnelSecret = ""
+	case existingName == "" && requestedExplicitly && state.TunnelID != "":
+		state.TunnelID = ""
+		state.TunnelSecret = ""
+	}
+	state.TunnelName = name
 }
 
 func ensureBaseFiles() error {

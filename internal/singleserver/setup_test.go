@@ -71,6 +71,53 @@ func TestSetupGitHubAppManifestCanBePublic(t *testing.T) {
 	}
 }
 
+func TestApplyCloudflareTunnelNamePreservesExistingTunnel(t *testing.T) {
+	state := &CloudflareState{
+		TunnelName:   "singleserver",
+		TunnelID:     "tunnel-id",
+		TunnelSecret: "secret",
+	}
+
+	applyCloudflareTunnelName(state, "singleserver", false)
+
+	if state.TunnelID != "tunnel-id" || state.TunnelSecret != "secret" {
+		t.Fatalf("expected tunnel state preserved: %#v", state)
+	}
+}
+
+func TestApplyCloudflareTunnelNameClearsDifferentNamedTunnel(t *testing.T) {
+	state := &CloudflareState{
+		TunnelName:   "old",
+		TunnelID:     "tunnel-id",
+		TunnelSecret: "secret",
+	}
+
+	applyCloudflareTunnelName(state, "new", true)
+
+	if state.TunnelName != "new" {
+		t.Fatalf("unexpected tunnel name: %s", state.TunnelName)
+	}
+	if state.TunnelID != "" || state.TunnelSecret != "" {
+		t.Fatalf("expected tunnel credentials cleared: %#v", state)
+	}
+}
+
+func TestApplyCloudflareTunnelNameClearsUnknownTunnelWhenExplicit(t *testing.T) {
+	state := &CloudflareState{
+		TunnelID:     "tunnel-id",
+		TunnelSecret: "secret",
+	}
+
+	applyCloudflareTunnelName(state, "new", true)
+
+	if state.TunnelName != "new" {
+		t.Fatalf("unexpected tunnel name: %s", state.TunnelName)
+	}
+	if state.TunnelID != "" || state.TunnelSecret != "" {
+		t.Fatalf("expected tunnel credentials cleared: %#v", state)
+	}
+}
+
 func setupManifestFromBody(t *testing.T, body string) map[string]any {
 	t.Helper()
 	const prefix = `name="manifest" value="`
