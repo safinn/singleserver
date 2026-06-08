@@ -458,13 +458,21 @@ func defaultAppDomain(appName string) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	if state.ZoneName == "" {
+	if state.ZoneName == "" || state.ZoneID == "" || state.TunnelID == "" || state.ConfigFile == "" {
 		return "", false, nil
 	}
 	return appName + "." + state.ZoneName, true, nil
 }
 
 var syncCloudflareAppDomainFunc = syncCloudflareAppDomain
+
+type cloudflareDomainSyncOps struct {
+	upsertCNAME func(hostname string) error
+	deleteCNAME func(hostname string) error
+	ensureRoute func(hostname string) error
+	removeRoute func(hostname string) error
+	restart     func() error
+}
 
 func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 	state, err := loadCloudflareState()
@@ -477,26 +485,58 @@ func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 	}
 	client, err := newCloudflareClient(cloudflareTokenFromEnvOrState(state))
 	if err != nil {
-		fmt.Fprintf(w, "cloudflare\tskipped\t%s\n", err)
-		return nil
+		return err
 	}
+	target := state.TunnelID + ".cfargotunnel.com"
+	ops := cloudflareDomainSyncOps{
+		upsertCNAME: func(hostname string) error {
+			return client.upsertCNAME(state.ZoneID, hostname, target, true)
+		},
+		deleteCNAME: func(hostname string) error {
+			return client.deleteCNAMEToTarget(state.ZoneID, hostname, target)
+		},
+		ensureRoute: func(hostname string) error {
+			return ensureCloudflaredRoute(state.ConfigFile, state.TunnelID, state.CredentialsFile, hostname, "http://127.0.0.1:80")
+		},
+		removeRoute: func(hostname string) error {
+			return removeCloudflaredRoute(state.ConfigFile, hostname)
+		},
+		restart: func() error {
+			return commandRun(10*time.Second, "systemctl", "restart", "cloudflared-singleserver.service")
+		},
+	}
+	return syncCloudflareAppDomainWithOps(hostname, add, w, state, ops)
+}
+
+func syncCloudflareAppDomainWithOps(hostname string, add bool, w io.Writer, state *CloudflareState, ops cloudflareDomainSyncOps) error {
 	if add {
-		if err := client.upsertCNAME(state.ZoneID, hostname, state.TunnelID+".cfargotunnel.com", true); err != nil {
+		if err := ops.ensureRoute(hostname); err != nil {
 			return err
 		}
-		if err := ensureCloudflaredRoute(state.ConfigFile, state.TunnelID, state.CredentialsFile, hostname, "http://127.0.0.1:80"); err != nil {
+		if err := ops.upsertCNAME(hostname); err != nil {
+			_ = ops.removeRoute(hostname)
+			return err
+		}
+		if err := ops.restart(); err != nil {
+			_ = ops.deleteCNAME(hostname)
+			_ = ops.removeRoute(hostname)
 			return err
 		}
 		fmt.Fprintf(w, "cloudflare\tdomain\tok\t%s -> %s.cfargotunnel.com\n", hostname, state.TunnelID)
 	} else {
-		if err := client.deleteCNAMEToTarget(state.ZoneID, hostname, state.TunnelID+".cfargotunnel.com"); err != nil {
+		if err := ops.removeRoute(hostname); err != nil {
 			return err
 		}
-		if err := removeCloudflaredRoute(state.ConfigFile, hostname); err != nil {
+		if err := ops.deleteCNAME(hostname); err != nil {
+			_ = ops.ensureRoute(hostname)
+			return err
+		}
+		if err := ops.restart(); err != nil {
+			_ = ops.ensureRoute(hostname)
+			_ = ops.upsertCNAME(hostname)
 			return err
 		}
 		fmt.Fprintf(w, "cloudflare\tdomain\tok\tremoved %s\n", hostname)
 	}
-	_ = commandRun(10*time.Second, "systemctl", "restart", "cloudflared-singleserver.service")
 	return nil
 }

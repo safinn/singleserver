@@ -1,7 +1,10 @@
 package singleserver
 
 import (
+	"bytes"
+	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -61,5 +64,85 @@ func TestConflictingCNAMERecord(t *testing.T) {
 	}
 	if conflict.ID != "1" {
 		t.Fatalf("unexpected conflict: %#v", conflict)
+	}
+}
+
+func TestSyncCloudflareAddRollsBackRouteWhenDNSFails(t *testing.T) {
+	state := &CloudflareState{TunnelID: "tunnel"}
+	calls := []string{}
+	ops := cloudflareDomainSyncOps{
+		ensureRoute: func(hostname string) error {
+			calls = append(calls, "ensure:"+hostname)
+			return nil
+		},
+		upsertCNAME: func(hostname string) error {
+			calls = append(calls, "upsert:"+hostname)
+			return errors.New("dns failed")
+		},
+		removeRoute: func(hostname string) error {
+			calls = append(calls, "remove:"+hostname)
+			return nil
+		},
+		deleteCNAME: func(hostname string) error {
+			calls = append(calls, "delete:"+hostname)
+			return nil
+		},
+		restart: func() error {
+			calls = append(calls, "restart")
+			return nil
+		},
+	}
+
+	var out bytes.Buffer
+	err := syncCloudflareAppDomainWithOps("app.example.com", true, &out, state, ops)
+	if err == nil || !strings.Contains(err.Error(), "dns failed") {
+		t.Fatalf("expected dns failure, got %v", err)
+	}
+	want := []string{"ensure:app.example.com", "upsert:app.example.com", "remove:app.example.com"}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("calls = %#v, want %#v", calls, want)
+	}
+	if strings.Contains(out.String(), "domain\tok") {
+		t.Fatalf("unexpected success output: %s", out.String())
+	}
+}
+
+func TestSyncCloudflareRemoveRollsBackRouteWhenDNSFails(t *testing.T) {
+	state := &CloudflareState{TunnelID: "tunnel"}
+	calls := []string{}
+	ops := cloudflareDomainSyncOps{
+		ensureRoute: func(hostname string) error {
+			calls = append(calls, "ensure:"+hostname)
+			return nil
+		},
+		upsertCNAME: func(hostname string) error {
+			calls = append(calls, "upsert:"+hostname)
+			return nil
+		},
+		removeRoute: func(hostname string) error {
+			calls = append(calls, "remove:"+hostname)
+			return nil
+		},
+		deleteCNAME: func(hostname string) error {
+			calls = append(calls, "delete:"+hostname)
+			return errors.New("dns failed")
+		},
+		restart: func() error {
+			calls = append(calls, "restart")
+			return nil
+		},
+	}
+
+	var out bytes.Buffer
+	err := syncCloudflareAppDomainWithOps("app.example.com", false, &out, state, ops)
+	if err == nil || !strings.Contains(err.Error(), "dns failed") {
+		t.Fatalf("expected dns failure, got %v", err)
+	}
+	want := []string{"remove:app.example.com", "delete:app.example.com", "ensure:app.example.com"}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("calls = %#v, want %#v", calls, want)
+	}
+	if strings.Contains(out.String(), "domain\tok") {
+		t.Fatalf("unexpected success output: %s", out.String())
 	}
 }

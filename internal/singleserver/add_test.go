@@ -87,7 +87,7 @@ func TestAddOptionsAppInfersHealthcheckFromFirstHost(t *testing.T) {
 func TestApplyDefaultAppDomainUsesCloudflareZone(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
-	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"zone_name":"nobrainer.host"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"zone_name":"nobrainer.host","zone_id":"zone","tunnel_id":"tunnel","config_file":"/etc/cloudflared/singleserver.yml"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 
