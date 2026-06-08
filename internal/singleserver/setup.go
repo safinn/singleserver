@@ -166,6 +166,9 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	if err := writeCloudflareState(state); err != nil {
 		return err
 	}
+	if err := pruneStaleCloudflareRoutes(client, state, w); err != nil {
+		return err
+	}
 	env, err := loadServiceEnv()
 	if err != nil {
 		return err

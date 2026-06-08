@@ -150,7 +150,7 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 		if err := cliDeploy([]string{opts.repo, targetBranch}, logger); err != nil {
 			return err
 		}
-		return cliDoctor(w)
+		return cliDoctor(nil, w)
 	}
 
 	fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s` or push to %s\n", app.Name, opts.repo, targetBranch)

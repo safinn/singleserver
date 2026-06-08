@@ -10,10 +10,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
-func cliDoctor(w io.Writer) error {
+func cliDoctor(args []string, w io.Writer) error {
+	if len(args) > 1 {
+		return errors.New("usage: singleserver doctor [app]")
+	}
+
 	failed := false
 	if !doctorDaemon(w) {
 		failed = true
@@ -24,7 +31,11 @@ func cliDoctor(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "config\tok\t%s\tapps=%d\n", configPath, len(config.Apps))
+	apps, err := doctorApps(config.Apps, args)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "config\tok\t%s\tapps=%d\tselected=%d\n", configPath, len(config.Apps), len(apps))
 
 	journal, journalErr := recentSingleServerJournal()
 	if journalErr != nil {
@@ -34,8 +45,18 @@ func cliDoctor(w io.Writer) error {
 		fmt.Fprintln(w, "journal\tok")
 	}
 
+	if !doctorDocker(w) {
+		failed = true
+	}
+	if !doctorDisk(w) {
+		failed = true
+	}
+	if !doctorCloudflare(w, config.Apps, apps) {
+		failed = true
+	}
+
 	github := NewGitHubClient(envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver"))
-	for _, app := range config.Apps {
+	for _, app := range apps {
 		fmt.Fprintf(w, "app\t%s\t%s\n", app.Name, app.Repo)
 		if !doctorGitHubInstallation(w, github, app) {
 			failed = true
@@ -60,6 +81,151 @@ func cliDoctor(w io.Writer) error {
 		return errors.New("doctor found failed checks")
 	}
 	return nil
+}
+
+func doctorDocker(w io.Writer) bool {
+	version, err := commandOutput(5*time.Second, "docker", "info", "--format", "{{.ServerVersion}}")
+	if err != nil {
+		fmt.Fprintf(w, "docker\tfailed\t%s\n", err)
+		return false
+	}
+	if _, err := commandOutput(5*time.Second, "docker", "ps", "--format", "{{.Names}}"); err != nil {
+		fmt.Fprintf(w, "docker\tfailed\t%s\n", err)
+		return false
+	}
+	fmt.Fprintf(w, "docker\tok\tserver=%s\n", version)
+	return true
+}
+
+func doctorDisk(w io.Writer) bool {
+	path := "/srv"
+	if _, err := os.Stat(path); err != nil {
+		path = "/"
+	}
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		fmt.Fprintf(w, "disk\tfailed\t%s\t%s\n", path, err)
+		return false
+	}
+	total := uint64(stat.Blocks) * uint64(stat.Bsize)
+	available := uint64(stat.Bavail) * uint64(stat.Bsize)
+	availablePercent := 0.0
+	if total > 0 {
+		availablePercent = float64(available) * 100 / float64(total)
+	}
+	if available < 1<<30 || availablePercent < 5 {
+		fmt.Fprintf(w, "disk\tfailed\t%s\tavailable=%s\tavailable_percent=%.1f\n", path, formatBytesGB(available), availablePercent)
+		return false
+	}
+	fmt.Fprintf(w, "disk\tok\t%s\tavailable=%s\tavailable_percent=%.1f\n", path, formatBytesGB(available), availablePercent)
+	return true
+}
+
+func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig) bool {
+	state, err := loadCloudflareState()
+	if err != nil {
+		fmt.Fprintf(w, "cloudflare\tfailed\t%s\n", err)
+		return false
+	}
+	if state.TunnelID == "" {
+		if appsHaveHosts(selectedApps) {
+			fmt.Fprintln(w, "cloudflare\tfailed\tconnect Cloudflare first with `singleserver cloudflare connect`")
+			return false
+		}
+		fmt.Fprintln(w, "cloudflare\tskipped\tno tunnel configured")
+		return true
+	}
+
+	failed := false
+	fmt.Fprintf(w, "cloudflare\tstate\tok\tzone=%s\ttunnel=%s\thook=%s\n", valueOrDash(state.ZoneName), state.TunnelID, valueOrDash(state.HookHost))
+	for label, path := range map[string]string{
+		"credentials": state.CredentialsFile,
+		"config":      state.ConfigFile,
+	} {
+		if path == "" {
+			fmt.Fprintf(w, "cloudflare\t%s\tfailed\tmissing path\n", label)
+			failed = true
+			continue
+		}
+		if _, err := os.Stat(path); err != nil {
+			fmt.Fprintf(w, "cloudflare\t%s\tfailed\t%s\n", label, err)
+			failed = true
+			continue
+		}
+		fmt.Fprintf(w, "cloudflare\t%s\tok\t%s\n", label, path)
+	}
+
+	if err := commandRun(5*time.Second, "systemctl", "is-active", "--quiet", "cloudflared-singleserver.service"); err != nil {
+		fmt.Fprintf(w, "cloudflare\tservice\tfailed\t%s\n", err)
+		failed = true
+	} else {
+		fmt.Fprintln(w, "cloudflare\tservice\tok\tcloudflared-singleserver.service")
+	}
+
+	routes := map[string]string{}
+	if state.ConfigFile != "" {
+		config, err := readCloudflaredConfig(state.ConfigFile)
+		if err != nil {
+			fmt.Fprintf(w, "cloudflare\troutes\tfailed\t%s\n", err)
+			failed = true
+		} else {
+			routes = cloudflaredRoutes(config)
+			fmt.Fprintf(w, "cloudflare\troutes\tok\tcount=%d\n", len(routes))
+		}
+	}
+
+	if state.HookHost != "" {
+		if !doctorHostResolves(w, "cloudflare", "hook_dns", state.HookHost) {
+			failed = true
+		}
+		if service := routes[strings.ToLower(state.HookHost)]; service == "" {
+			fmt.Fprintf(w, "cloudflare\thook_route\tfailed\t%s missing from %s\n", state.HookHost, state.ConfigFile)
+			failed = true
+		} else {
+			fmt.Fprintf(w, "cloudflare\thook_route\tok\t%s -> %s\n", state.HookHost, service)
+		}
+	}
+
+	expectedHosts := expectedCloudflaredHosts(state.HookHost, allApps)
+	for _, host := range staleCloudflaredHosts(routes, expectedHosts) {
+		fmt.Fprintf(w, "cloudflare\tstale_route\tfailed\t%s -> %s not in apps.yml\n", host, routes[host])
+		failed = true
+	}
+
+	for _, app := range selectedApps {
+		for _, host := range app.Hosts {
+			if !doctorHostResolves(w, app.Name, "dns", host) {
+				failed = true
+			}
+			if service := routes[strings.ToLower(host)]; service == "" {
+				fmt.Fprintf(w, "%s\ttunnel_route\tfailed\t%s missing from %s\n", app.Name, host, state.ConfigFile)
+				failed = true
+			} else {
+				fmt.Fprintf(w, "%s\ttunnel_route\tok\t%s -> %s\n", app.Name, host, service)
+			}
+		}
+	}
+
+	return !failed
+}
+
+func doctorApps(apps []AppConfig, args []string) ([]AppConfig, error) {
+	if len(args) > 1 {
+		return nil, errors.New("usage: singleserver doctor [app]")
+	}
+	if len(args) == 0 {
+		return apps, nil
+	}
+	filter := strings.TrimSpace(args[0])
+	if filter == "" {
+		return nil, errors.New("usage: singleserver doctor [app]")
+	}
+	for _, app := range apps {
+		if appMatches(app, filter) {
+			return []AppConfig{app}, nil
+		}
+	}
+	return nil, fmt.Errorf("%s is not configured", filter)
 }
 
 func doctorDaemon(w io.Writer) bool {
@@ -153,6 +319,78 @@ func doctorHealthcheck(w io.Writer, app AppConfig) bool {
 	}
 	fmt.Fprintf(w, "%s\thealthcheck\tok\t%s\n", app.Name, app.Healthcheck)
 	return true
+}
+
+func doctorHostResolves(w io.Writer, scope string, check string, host string) bool {
+	if err := commandRun(5*time.Second, "getent", "hosts", host); err != nil {
+		fmt.Fprintf(w, "%s\t%s\tfailed\t%s\t%s\n", scope, check, host, err)
+		return false
+	}
+	fmt.Fprintf(w, "%s\t%s\tok\t%s\n", scope, check, host)
+	return true
+}
+
+func readCloudflaredConfig(path string) (*cloudflaredConfig, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var config cloudflaredConfig
+	if err := yaml.Unmarshal(body, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+func cloudflaredRoutes(config *cloudflaredConfig) map[string]string {
+	routes := map[string]string{}
+	if config == nil {
+		return routes
+	}
+	for _, ingress := range config.Ingress {
+		if ingress.Hostname == "" {
+			continue
+		}
+		routes[strings.ToLower(ingress.Hostname)] = ingress.Service
+	}
+	return routes
+}
+
+func appsHaveHosts(apps []AppConfig) bool {
+	for _, app := range apps {
+		if len(app.Hosts) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func expectedCloudflaredHosts(hookHost string, apps []AppConfig) map[string]bool {
+	hosts := map[string]bool{}
+	if strings.TrimSpace(hookHost) != "" {
+		hosts[strings.ToLower(strings.TrimSpace(hookHost))] = true
+	}
+	for _, app := range apps {
+		for _, host := range app.Hosts {
+			host = strings.TrimSpace(host)
+			if host != "" {
+				hosts[strings.ToLower(host)] = true
+			}
+		}
+	}
+	return hosts
+}
+
+func valueOrDash(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "-"
+	}
+	return value
+}
+
+func formatBytesGB(value uint64) string {
+	return fmt.Sprintf("%.1fGB", float64(value)/(1<<30))
 }
 
 func recentSingleServerJournal() (string, error) {

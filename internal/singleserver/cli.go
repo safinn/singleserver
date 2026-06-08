@@ -45,7 +45,7 @@ func RunCLI(args []string, logger *log.Logger) error {
 	case "render-deploy":
 		return cliRenderDeploy(args[1:], os.Stdout)
 	case "doctor":
-		return cliDoctor(os.Stdout)
+		return cliDoctor(args[1:], os.Stdout)
 	case "logs":
 		return cliLogs(args[1:], os.Stdout)
 	case "remove":
@@ -71,22 +71,22 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `Single Server
 
 Usage:
-  singleserver init
+  singleserver init [--zone example.com] [--skip-cloudflare]
   singleserver github connect [--name "Single Server"]
-  singleserver cloudflare connect
+  singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]
   singleserver list
   singleserver status
-  singleserver add <github-url> [--no-deploy]
+  singleserver add <github-url> [options]
   singleserver deploy <owner/repo> [ref]
   singleserver render-deploy <owner/repo>
-  singleserver doctor
-  singleserver logs [app] [--follow] [--runtime]
+  singleserver doctor [app]
+  singleserver logs [app] [options]
   singleserver domains <add|remove|list|verify> ...
   singleserver env <set|list|unset> ...
-  singleserver storage enable <app> [--mount /storage]
+  singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app]
   singleserver backup <app>
-  singleserver restore <app> <backup-id>
-  singleserver remove <app>
+  singleserver restore <app> <backup-id-or-path>
+  singleserver remove <app> [--delete-storage]
   singleserver upgrade
 
 Commands:
@@ -116,15 +116,7 @@ func cliList(w io.Writer) error {
 		return err
 	}
 	for _, app := range config.Apps {
-		branch := app.Branch
-		if branch == "" {
-			branch = "(repo default)"
-		}
-		healthcheck := app.Healthcheck
-		if healthcheck == "" {
-			healthcheck = "-"
-		}
-		fmt.Fprintf(w, "%s\t%s\tbranch=%s\thealthcheck=%s\n", app.Name, app.Repo, branch, healthcheck)
+		fmt.Fprintf(w, "%s\t%s\tbranch=%s\thosts=%s\thealthcheck=%s\n", app.Name, app.Repo, displayBranch(app), displayHosts(app), displayHealthcheck(app))
 	}
 	return nil
 }
@@ -143,9 +135,12 @@ func cliStatus(w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	containers, containerErr := runningAppContainers()
 	for _, app := range config.Apps {
+		runtime := appRuntimeStatus(app, containers, containerErr)
+		prefix := fmt.Sprintf("%s\t%s\tbranch=%s\thosts=%s\truntime=%s", app.Name, app.Repo, displayBranch(app), displayHosts(app), runtime)
 		if app.Healthcheck == "" {
-			fmt.Fprintf(w, "%s\t%s\t(no healthcheck)\n", app.Name, app.Repo)
+			fmt.Fprintf(w, "%s\thealthcheck=unknown\tno healthcheck configured\n", prefix)
 			continue
 		}
 		status := "ok"
@@ -154,9 +149,40 @@ func cliStatus(w io.Writer) error {
 			status = "failed"
 			detail = "\t" + err.Error()
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s%s\n", app.Name, app.Repo, status, detail)
+		fmt.Fprintf(w, "%s\thealthcheck=%s%s\n", prefix, status, detail)
 	}
 	return nil
+}
+
+func displayBranch(app AppConfig) string {
+	if strings.TrimSpace(app.Branch) == "" {
+		return "(repo default)"
+	}
+	return app.Branch
+}
+
+func displayHosts(app AppConfig) string {
+	if len(app.Hosts) == 0 {
+		return "-"
+	}
+	return strings.Join(app.Hosts, ",")
+}
+
+func displayHealthcheck(app AppConfig) string {
+	if strings.TrimSpace(app.Healthcheck) == "" {
+		return "-"
+	}
+	return app.Healthcheck
+}
+
+func appRuntimeStatus(app AppConfig, containers map[string]string, err error) string {
+	if err != nil {
+		return "unknown:" + compactWhitespace(err.Error())
+	}
+	if container, ok := containerForApp(app.Name, containers); ok {
+		return "running:" + container
+	}
+	return "stopped"
 }
 
 func cliDeploy(args []string, logger *log.Logger) error {

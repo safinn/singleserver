@@ -330,7 +330,7 @@ func cliUpgrade(w io.Writer) error {
 	}
 	_ = commandRun(15*time.Second, "systemctl", "restart", "singleserver.service")
 	fmt.Fprintln(w, "upgrade\tok\tinstaller completed")
-	return cliDoctor(w)
+	return cliDoctor(nil, w)
 }
 
 func configuredApp(appName string) (*AppConfig, error) {
@@ -408,16 +408,48 @@ func appContainerName(appName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	containers := map[string]string{}
 	for _, name := range strings.Split(out, "\n") {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
-		if strings.HasPrefix(name, appName+"-") || name == appName {
-			return name, nil
-		}
+		containers[name] = name
+	}
+	if name, ok := containerForApp(appName, containers); ok {
+		return name, nil
 	}
 	return "", fmt.Errorf("no running container found for %s", appName)
+}
+
+func runningAppContainers() (map[string]string, error) {
+	out, err := commandOutput(5*time.Second, "docker", "ps", "--format", "{{.Names}}")
+	if err != nil {
+		return nil, err
+	}
+	containers := map[string]string{}
+	for _, name := range strings.Split(out, "\n") {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			containers[name] = name
+		}
+	}
+	return containers, nil
+}
+
+func containerForApp(appName string, containers map[string]string) (string, bool) {
+	if containers == nil {
+		return "", false
+	}
+	if container, ok := containers[appName]; ok {
+		return container, true
+	}
+	for name, container := range containers {
+		if strings.HasPrefix(name, appName+"-") {
+			return container, true
+		}
+	}
+	return "", false
 }
 
 func runCommandToWriter(w io.Writer, timeout time.Duration, name string, args ...string) error {

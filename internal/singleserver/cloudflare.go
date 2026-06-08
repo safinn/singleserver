@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -356,6 +357,51 @@ func removeCloudflaredRoute(configPath string, hostname string) error {
 		return err
 	}
 	return writeFileAtomic(configPath, buf.Bytes())
+}
+
+func staleCloudflaredHosts(routes map[string]string, expected map[string]bool) []string {
+	hosts := []string{}
+	for host := range routes {
+		if !expected[strings.ToLower(host)] {
+			hosts = append(hosts, host)
+		}
+	}
+	sort.Strings(hosts)
+	return hosts
+}
+
+func pruneStaleCloudflareRoutes(client *CloudflareClient, state *CloudflareState, w io.Writer) error {
+	if state == nil || state.ConfigFile == "" {
+		return nil
+	}
+	config, err := LoadConfig(envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	cloudflaredConfig, err := readCloudflaredConfig(state.ConfigFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	expected := expectedCloudflaredHosts(state.HookHost, config.Apps)
+	routes := cloudflaredRoutes(cloudflaredConfig)
+	for _, host := range staleCloudflaredHosts(routes, expected) {
+		if state.ZoneID != "" && client != nil {
+			if err := client.deleteDNSRecord(state.ZoneID, host, "CNAME"); err != nil {
+				return err
+			}
+		}
+		if err := removeCloudflaredRoute(state.ConfigFile, host); err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "cloudflare\troute\tok\tremoved stale %s\n", host)
+	}
+	return nil
 }
 
 func randomTunnelSecret() (string, error) {
