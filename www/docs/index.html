@@ -29,12 +29,14 @@
 
         main {
             max-width: 980px;
+            width: 100%;
             margin: 0 auto;
             border: 4px solid var(--ink);
             box-shadow: 12px 12px 0 var(--ink);
             padding: 40px;
             background: #fff;
             position: relative;
+            overflow-wrap: break-word;
         }
 
         .top-links {
@@ -71,10 +73,12 @@
             font-weight: 700;
             background: var(--tertiary);
             display: inline-block;
+            max-width: 100%;
             padding: 5px 10px;
             transform: rotate(-1deg);
             border: 2px solid var(--ink);
             box-shadow: 4px 4px 0 var(--ink);
+            line-height: 1.2;
         }
 
         .lede {
@@ -173,7 +177,6 @@
             flex-direction: column;
             gap: 26px;
             margin-top: 18px;
-            margin-bottom: 14px;
         }
 
         .quickstart-list > div {
@@ -187,9 +190,20 @@
         }
 
         .step-title {
-            font-size: 1.05rem;
+            font-size: 1.1rem;
             font-weight: 700;
-            margin-bottom: 0;
+            margin: 0;
+        }
+
+        .quickstart-list .code-block {
+            padding: 15px 48px 15px 20px;
+            font-size: 1rem;
+            white-space: nowrap;
+        }
+
+        .quickstart-list .copy-btn {
+            top: 50%;
+            transform: translateY(-50%);
         }
 
         .concept-list,
@@ -227,7 +241,7 @@
 
         .command-entry {
             border-bottom: 2px solid var(--highlight);
-            padding: 28px 0;
+            padding: 30px 0 32px;
         }
 
         .command-heading {
@@ -240,21 +254,24 @@
 
         .command-name {
             display: block;
-            font-size: 1.15rem;
+            font-size: 1.35rem;
             font-weight: 700;
-            margin-bottom: 10px;
+            line-height: 1.2;
+            margin-bottom: 12px;
         }
 
         .command-usage {
             display: block;
+            width: max-content;
+            max-width: 100%;
             overflow-x: auto;
-            white-space: normal;
-            overflow-wrap: anywhere;
+            white-space: pre;
             color: #fff;
             background: var(--ink);
-            padding: 10px 12px;
+            padding: 12px 14px;
+            border-radius: 8px;
             line-height: 1.45;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
         }
 
         .command-description {
@@ -263,13 +280,16 @@
         }
 
         .command-details {
-            margin-top: 16px;
+            border-left: 4px solid var(--highlight);
+            margin-top: 18px;
+            max-width: 780px;
+            padding-left: 16px;
         }
 
         .option-heading {
             color: var(--ink);
             font-weight: 700;
-            margin-bottom: 0;
+            margin-bottom: 6px;
             font-size: 0.98rem;
         }
 
@@ -383,8 +403,17 @@
         }
 
         @media (max-width: 760px) {
-            body { padding: 24px 14px; }
-            main { padding: 20px; box-shadow: 8px 8px 0 var(--ink); }
+            body { padding: 24px 14px; overflow-x: hidden; }
+            main {
+                max-width: calc(100vw - 36px);
+                padding: 20px;
+                width: calc(100vw - 36px);
+                box-shadow: 8px 8px 0 var(--ink);
+            }
+            .top-links {
+                flex-wrap: wrap;
+                justify-content: flex-start;
+            }
             h1 { font-size: 3rem; }
             .tagline { font-size: 1.08rem; }
             .toc {
@@ -398,6 +427,18 @@
             .connector {
                 transform: rotate(90deg);
                 height: 22px;
+            }
+            .code-block,
+            .command-usage {
+                overflow-wrap: anywhere;
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+            .quickstart-list .code-block {
+                white-space: pre-wrap;
+            }
+            .command-usage {
+                width: 100%;
             }
             .code-block { font-size: 0.9rem; }
         }
@@ -414,7 +455,7 @@
     <header>
         <h1>docs</h1>
         <div class="tagline">The Single Server command contract.</div>
-        <p class="lede">Single Server itself is a small Go binary. It runs as a systemd service on your Linux server, keeps the app registry in <code>/etc/singleserver/apps.yml</code>, verifies GitHub webhooks, fetches pushed commits with GitHub App installation tokens, updates Cloudflare Tunnel routing, generates Kamal deploy config, and lets Kamal perform the container rollout.</p>
+        <p class="lede">Single Server itself is a small Go binary. It runs as a systemd service on your Linux server, keeps the app registry in <code>/etc/singleserver/apps.yml</code>, accepts signed GitHub push webhooks through Cloudflare Tunnel, fetches the pushed commit with a GitHub App installation token, renders Kamal config from server-side conventions, and starts the deploy on the same machine.</p>
     </header>
 
     <nav class="toc" aria-label="Table of contents">
@@ -484,18 +525,19 @@
     <section id="concepts">
         <h2><a href="#concepts">Concepts</a></h2>
         <ul class="concept-list">
-            <li><strong>Your server</strong> The server is both the deploy control plane and the runtime host. The Single Server daemon, Docker, Kamal, cloudflared, Git checkouts, app config, deploy credentials, persistent storage, backups, and logs all live on this one machine, so day-to-day operations happen over SSH in one place.</li>
-            <li><strong>The daemon</strong> The daemon listens on <code>127.0.0.1</code> and Cloudflare Tunnel exposes only the setup and webhook endpoints that need to be public. For each webhook, it verifies the GitHub signature, checks the pushed repository and branch against the app registry, fetches the exact commit, runs the deploy, and records the result.</li>
-            <li><strong>GitHub App</strong> GitHub is the event source and code access layer. The GitHub App sends push webhooks to your server, gives Single Server short-lived installation tokens to fetch repositories, and lets the daemon write pending, success, and failure commit statuses back to the pushed commit.</li>
-            <li><strong><code>apps.yml</code></strong> This file is the deployment allowlist and central app registry. Installing the GitHub App on a repository only gives Single Server permission to see it; the repository still will not deploy unless it is listed in <code>/etc/singleserver/apps.yml</code>.</li>
-            <li><strong>App containers</strong> Every app runs in its own Docker container. Single Server prepares the checkout and generated deploy config, then Kamal builds the image, starts the replacement container, runs the healthcheck, and moves traffic only after the new container is ready.</li>
-            <li><strong>Cloudflare Tunnel</strong> Public HTTP traffic enters through Cloudflare Tunnel. Cloudflare DNS points app hostnames at the tunnel, and the tunnel config maps each hostname either to the Single Server daemon for webhooks/setup or to the app container port managed by Kamal.</li>
-            <li><strong>Central state</strong> App domains, server-side environment files, storage mounts, backups, deploy logs, and provider credentials are server concerns. App repositories stay focused on application code and the Dockerfile needed to build the container.</li>
+            <li><strong>Your server</strong> The server is both the deploy controller and the runtime host. The daemon, Docker, Kamal, cloudflared, Git checkouts, deploy credentials, app config, persistent storage, backups, and logs all live on this one machine. That is why normal operations happen over SSH instead of across repo settings, CI runners, and separate dashboards.</li>
+            <li><strong>The daemon</strong> The daemon listens locally on <code>127.0.0.1</code>. Cloudflare Tunnel exposes the small public surface it needs: setup pages and GitHub webhooks. When a webhook arrives, the daemon verifies the signature, checks the repository and branch against <code>apps.yml</code>, fetches the exact pushed SHA, runs the deploy, writes logs, and reports the result.</li>
+            <li><strong>GitHub App</strong> The GitHub App is how the server receives push events and reads code. It sends signed webhooks to your server, issues short-lived installation tokens for repository fetches, and lets the daemon write pending, success, and failure commit statuses back to GitHub. GitHub triggers the deploy, but the deploy runs on your server.</li>
+            <li><strong><code>apps.yml</code></strong> This is the central app registry and deployment allowlist. Installing the GitHub App on a repository only grants access; it does not make that repository deployable. A pushed repository must also match an app entry in <code>/etc/singleserver/apps.yml</code>, and the pushed branch must match that app's configured branch.</li>
+            <li><strong>App containers</strong> Every app runs in its own Docker container. Single Server prepares the checkout and generated deploy config, then Kamal builds the image, starts the replacement container, runs the healthcheck, and moves traffic only after the new container is ready. The result is container isolation without writing per-app deploy plumbing.</li>
+            <li><strong>Cloudflare Tunnel</strong> Public HTTP traffic enters through Cloudflare Tunnel. Cloudflare DNS points app hostnames at the tunnel, and the tunnel config maps each hostname either to the Single Server daemon for setup/webhooks or to the app proxy managed by Kamal. Public TLS terminates at Cloudflare, so generated Kamal config uses plain local HTTP behind the tunnel.</li>
+            <li><strong>Central state</strong> Domains, server-side environment files, storage mounts, backups, deploy logs, and provider credentials are server concerns. Repositories stay focused on application code and a Dockerfile. When an app needs an exception, the exception belongs in <code>apps.yml</code> or a server-side command, not in GitHub Actions secrets or a repo-specific runner.</li>
         </ul>
     </section>
 
     <section id="commands">
         <h2><a href="#commands">Commands</a></h2>
+        <p>Commands are grouped by setup, app operations, and server management. Each entry shows the command form first; arguments, subcommands, and options are listed directly under the command they belong to.</p>
 
         <h3><a href="#setup-commands">Setup</a></h3>
         <div class="command-list" id="setup-commands">
@@ -756,7 +798,8 @@
 
     <section id="config">
         <h2><a href="#config">Configuration</a></h2>
-        <p>Single Server is convention over configuration. The normal path is to add an app with only its GitHub URL; Single Server infers the app name, checkout path, deploy branch, app domain, healthcheck path, storage location, and generated Kamal config. <code>/etc/singleserver/apps.yml</code> exists as the central override file when an app needs to differ from those defaults.</p>
+        <p>Single Server is convention over configuration. The normal path is to add an app with only its GitHub URL. From that one input, Single Server infers the app name, checkout path, deploy branch, app domain, healthcheck path, generated Kamal config, and the default storage location when storage is enabled.</p>
+        <p><code>/etc/singleserver/apps.yml</code> is the central override file. Use it when an app needs to differ from the conventions, such as a non-default branch, multiple domains, a different container port, a custom healthcheck, or a storage mount.</p>
 
         <h3 id="conventions"><a href="#conventions">Conventions</a></h3>
         <ul class="concept-list">
@@ -771,6 +814,8 @@
             <li><strong>Healthcheck</strong> The default container healthcheck path is <code>/up</code>. Kamal uses that path to decide when the replacement container is ready, and Single Server uses the public app domain plus that path as the external healthcheck unless an app sets a different healthcheck URL.</li>
             <li><strong>Secrets</strong> Secrets live on the server in app env files. They are injected into generated Kamal config without requiring GitHub repository secrets, deploy keys, or GitHub Actions workflows.</li>
             <li><strong>Storage</strong> Persistent app data defaults to <code>/srv/storage/&lt;app&gt;</code> and mounts into the container at <code>/storage</code>. This is the expected place for SQLite databases, uploads, and other app-owned data.</li>
+            <li><strong>Backups</strong> Backups are written under <code>/srv/backups/&lt;app&gt;</code>. Storage-enabled apps can be backed up and restored from the server without adding app-specific backup code to the repository.</li>
+            <li><strong>Logs</strong> Deploy logs and daemon logs live in the systemd journal for <code>singleserver.service</code>. Runtime logs come from the app containers and are surfaced through <code>singleserver logs &lt;app&gt; --runtime</code>.</li>
         </ul>
 
         <h3 id="apps-yml"><a href="#apps-yml">Apps Config</a></h3>
