@@ -3,6 +3,7 @@
 Single Server is a tiny deploy daemon for running many small apps on one server.
 
 It receives GitHub App `push` webhooks, checks a central allowlist, fetches the exact pushed SHA, and runs Kamal on the host.
+All `singleserver` commands are run on that host over SSH.
 
 For the intended user experience and roadmap, see
 [Working Backwards: The Single Server User Experience](docs/working-backwards.md).
@@ -132,6 +133,7 @@ That page creates the GitHub App from a manifest, exchanges GitHub's callback co
 Install the daemon binary as both `/usr/local/bin/singleserverd` and `/usr/local/bin/singleserver`.
 
 ```sh
+ssh root@203.0.113.10
 singleserver list
 singleserver status
 singleserver add owner/repo --host example.com --host www.example.com

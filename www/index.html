@@ -290,14 +290,24 @@
     <header>
         <h1>single server</h1>
         <div class="tagline">Git push to production in &lt;5 seconds.</div>
-        <p class="lede">The easiest way to run multiple apps on a single server. Push to GitHub, and Single Server builds, deploys, healthchecks, and swaps each app in its own container.</p>
+        <p class="lede">The easiest way to run multiple apps on a single server. SSH in, install once, connect GitHub, add apps, and manage everything from the host.</p>
     </header>
 
     <section>
         <h2><a href="#commands">Use it</a></h2>
-        <p>Start with a blank server and a Cloudflare-managed domain. Connect GitHub once. Add any repo with a Dockerfile. Every push after that goes straight to production.</p>
+        <p>Every command runs on your server. After setup, every push to an added app goes straight to production.</p>
 
         <div class="commands-list" id="commands">
+            <div class="command-item">
+                <p class="step-desc">SSH to a blank server.</p>
+                <div class="code-wrapper">
+                    <code class="code-block">ssh root@203.0.113.10</code>
+                    <button class="copy-btn" aria-label="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
+            </div>
+
             <div class="command-item">
                 <p class="step-desc">Install Single Server.</p>
                 <div class="code-wrapper">
@@ -332,6 +342,16 @@
                 <p class="step-desc">Add an app and ship it.</p>
                 <div class="code-wrapper">
                     <code class="code-block">singleserver <span class="keyword">add</span> me/my-app <span class="flag">--deploy</span></code>
+                    <button class="copy-btn" aria-label="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="command-item">
+                <p class="step-desc">Check what is running.</p>
+                <div class="code-wrapper">
+                    <code class="code-block">singleserver <span class="keyword">status</span></code>
                     <button class="copy-btn" aria-label="Copy to clipboard">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                     </button>
@@ -392,8 +412,8 @@
                 <p>Single Server generates deploy config from conventions, while Kamal handles the container rollout.</p>
             </div>
             <div class="feature">
-                <strong>Doctor included</strong>
-                <p>Check the daemon, GitHub App access, checkouts, deploy config, last deploys, and public healthchecks.</p>
+                <strong>Monitor from the host</strong>
+                <p>Use status, logs, and doctor commands from the same server where deploys run.</p>
             </div>
         </div>
     </section>

@@ -7,6 +7,9 @@ The goal is simple: start with a blank VPS from Hetzner, DigitalOcean, AWS,
 Azure, or any other provider, then deploy many small GitHub projects to it with
 fast, isolated, repeatable deploys.
 
+Single Server is intentionally host-centered: SSH to the server, install it
+there, and run every `singleserver` command from that one machine.
+
 ## The Ideal Outcome
 
 A user should be able to provision a new server and deploy their first app with
@@ -35,7 +38,7 @@ Kamal config, or per-repo runner setup.
 Single Server has four moving parts:
 
 - **Server:** one VPS running Docker, Kamal, cloudflared, and the Single Server
-  daemon.
+  daemon. This is where every `singleserver` command runs.
 - **GitHub App:** the event source and deploy credential provider. Push webhooks
   trigger deploys; installation tokens fetch code and set commit statuses.
 - **`apps.yml`:** the allowlist. Only repositories in this file can deploy, even
@@ -138,6 +141,8 @@ Then it should run:
 ```sh
 singleserver doctor
 ```
+
+All follow-up commands continue to run on the server over SSH.
 
 ## Adding Apps
 
