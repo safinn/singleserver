@@ -309,40 +309,63 @@ func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfi
 	if host == "" || strings.Contains(host, "://") || strings.Contains(host, "/") {
 		return nil, fmt.Errorf("invalid domain: %q", host)
 	}
-	if err := updateConfiguredApp(appName, func(app *AppConfig) error {
-		if add {
-			if !containsFold(app.Hosts, host) {
-				app.Hosts = append(app.Hosts, host)
-			}
-			if app.Healthcheck == "" {
-				app.Healthcheck = "https://" + host + app.HealthcheckPath
-			}
-		} else {
-			removedHealthcheck := "https://" + host + app.HealthcheckPath
-			app.Hosts = removeFold(app.Hosts, host)
-			if strings.EqualFold(app.Healthcheck, removedHealthcheck) {
-				if len(app.Hosts) > 0 {
-					app.Healthcheck = "https://" + app.Hosts[0] + app.HealthcheckPath
-				} else {
-					app.Healthcheck = ""
-				}
-			}
-		}
-		return nil
-	}); err != nil {
+	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
+	config, err := LoadConfig(configPath)
+	if err != nil {
 		return nil, err
 	}
-	app, err := configuredApp(appName)
-	if err != nil {
+	appIndex := -1
+	for i := range config.Apps {
+		if appMatches(config.Apps[i], appName) {
+			appIndex = i
+			break
+		}
+	}
+	if appIndex < 0 {
+		return nil, fmt.Errorf("%s is not configured", appName)
+	}
+
+	if !add && !containsFold(config.Apps[appIndex].Hosts, host) {
+		return nil, fmt.Errorf("%s is not configured for %s", host, config.Apps[appIndex].Name)
+	}
+
+	app := &config.Apps[appIndex]
+	if add {
+		if !containsFold(app.Hosts, host) {
+			app.Hosts = append(app.Hosts, host)
+		}
+		if app.Healthcheck == "" {
+			app.Healthcheck = "https://" + host + app.HealthcheckPath
+		}
+	} else {
+		removedHealthcheck := "https://" + host + app.HealthcheckPath
+		app.Hosts = removeFold(app.Hosts, host)
+		if strings.EqualFold(app.Healthcheck, removedHealthcheck) {
+			if len(app.Hosts) > 0 {
+				app.Healthcheck = "https://" + app.Hosts[0] + app.HealthcheckPath
+			} else {
+				app.Healthcheck = ""
+			}
+		}
+	}
+	if err := config.Normalize(); err != nil {
+		return nil, err
+	}
+	app = &config.Apps[appIndex]
+
+	if err := syncCloudflareAppDomainFunc(host, add, w); err != nil {
+		return nil, err
+	}
+	if err := writeConfig(configPath, config); err != nil {
+		if rollbackErr := syncCloudflareAppDomainFunc(host, !add, io.Discard); rollbackErr != nil {
+			return nil, fmt.Errorf("%w; rollback cloudflare domain failed: %v", err, rollbackErr)
+		}
 		return nil, err
 	}
 	if add {
 		fmt.Fprintf(w, "%s\tdomain\tok\tadded %s\n", app.Name, host)
 	} else {
 		fmt.Fprintf(w, "%s\tdomain\tok\tremoved %s\n", app.Name, host)
-	}
-	if err := syncCloudflareAppDomain(host, add, w); err != nil {
-		return nil, err
 	}
 	return app, nil
 }

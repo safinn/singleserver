@@ -2,6 +2,7 @@ package singleserver
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"log"
 	"os"
@@ -102,6 +103,79 @@ func TestDomainsAddRejectsHostUsedByAnotherApp(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "domain\tok") {
 		t.Fatalf("unexpected success output: %s", out.String())
+	}
+}
+
+func TestDomainsAddKeepsConfigWhenCloudflareFails(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	if err := os.WriteFile(configPath, []byte("apps:\n  - dvassallo/fullsend\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalSync := syncCloudflareAppDomainFunc
+	t.Cleanup(func() { syncCloudflareAppDomainFunc = originalSync })
+	syncCloudflareAppDomainFunc = func(hostname string, add bool, w io.Writer) error {
+		return errors.New("cloudflare unavailable")
+	}
+
+	var out bytes.Buffer
+	logger := log.New(io.Discard, "", 0)
+	err := cliDomains([]string{"add", "fullsend", "play.nobrainer.host", "--no-deploy"}, &out, logger)
+	if err == nil {
+		t.Fatal("expected Cloudflare error")
+	}
+	if !strings.Contains(err.Error(), "cloudflare unavailable") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out.String(), "domain\tok") {
+		t.Fatalf("unexpected success output: %s", out.String())
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Apps[0].Hosts) != 0 {
+		t.Fatalf("expected config unchanged, got hosts %#v", config.Apps[0].Hosts)
+	}
+	if config.Apps[0].Healthcheck != "" {
+		t.Fatalf("expected healthcheck unchanged, got %s", config.Apps[0].Healthcheck)
+	}
+}
+
+func TestDomainsRemoveRejectsHostNotConfiguredForApp(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	if err := os.WriteFile(configPath, []byte(`apps:
+  - repo: dvassallo/fullsend
+    hosts:
+      - play.nobrainer.host
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	originalSync := syncCloudflareAppDomainFunc
+	t.Cleanup(func() { syncCloudflareAppDomainFunc = originalSync })
+	syncCalled := false
+	syncCloudflareAppDomainFunc = func(hostname string, add bool, w io.Writer) error {
+		syncCalled = true
+		return nil
+	}
+
+	var out bytes.Buffer
+	logger := log.New(io.Discard, "", 0)
+	err := cliDomains([]string{"remove", "fullsend", "other.nobrainer.host", "--no-deploy"}, &out, logger)
+	if err == nil {
+		t.Fatal("expected unowned host error")
+	}
+	if !strings.Contains(err.Error(), "other.nobrainer.host is not configured for fullsend") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if syncCalled {
+		t.Fatal("did not expect Cloudflare sync for unowned host")
 	}
 }
 

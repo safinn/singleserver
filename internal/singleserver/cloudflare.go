@@ -442,6 +442,8 @@ func defaultAppDomain(appName string) (string, bool, error) {
 	return appName + "." + state.ZoneName, true, nil
 }
 
+var syncCloudflareAppDomainFunc = syncCloudflareAppDomain
+
 func syncCloudflareAppDomain(hostname string, add bool, w io.Writer) error {
 	state, err := loadCloudflareState()
 	if err != nil {

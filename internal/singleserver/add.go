@@ -138,15 +138,24 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 		return nil
 	}
 
+	syncedHosts := []string{}
+	for _, host := range app.Hosts {
+		if err := syncCloudflareAppDomainFunc(host, true, w); err != nil {
+			for _, syncedHost := range syncedHosts {
+				_ = syncCloudflareAppDomainFunc(syncedHost, false, io.Discard)
+			}
+			return err
+		}
+		syncedHosts = append(syncedHosts, host)
+	}
+
 	if err := writeFileAtomic(configPath, updated); err != nil {
+		for _, syncedHost := range syncedHosts {
+			_ = syncCloudflareAppDomainFunc(syncedHost, false, io.Discard)
+		}
 		return err
 	}
 	fmt.Fprintf(w, "%s\tconfig\tok\tadded to %s\n", app.Name, configPath)
-	for _, host := range app.Hosts {
-		if err := syncCloudflareAppDomain(host, true, w); err != nil {
-			return err
-		}
-	}
 
 	if !opts.noDeploy {
 		fmt.Fprintf(w, "%s\tdeploy\tstart\t%s\n", app.Name, targetBranch)
