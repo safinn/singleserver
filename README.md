@@ -181,9 +181,9 @@ connected zone, such as `my-app.example.com` or `singleserver-com.example.com`.
 Pass `--no-deploy` to configure the app and wait for the next push or manual
 deploy.
 
-`singleserver deploy <owner/repo> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
+`singleserver deploy <owner/repo|app> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
 
-`singleserver render-deploy <owner/repo>` prints the generated Kamal `deploy.yml`
+`singleserver render-deploy <owner/repo|app>` prints the generated Kamal `deploy.yml`
 for a configured app. It does not inspect or modify the app repository.
 
 `singleserver domains add <app> <domain>` and `singleserver domains remove <app>
