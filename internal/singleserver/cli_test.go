@@ -64,6 +64,38 @@ func TestContainerForApp(t *testing.T) {
 	}
 }
 
+func TestAppSummaryStatusWithoutHealthcheck(t *testing.T) {
+	app := AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"}
+
+	if got := appSummaryStatus(app, map[string]string{"fullsend-web-123": "fullsend-web-123"}, nil, ""); got != "running" {
+		t.Fatalf("unexpected running summary: %q", got)
+	}
+	if got := appSummaryStatus(app, map[string]string{}, nil, ""); got != "stopped" {
+		t.Fatalf("unexpected stopped summary: %q", got)
+	}
+	journal := "[deploy:fullsend-123] failed after 42ms: boom"
+	if got := appSummaryStatus(app, map[string]string{"fullsend-web-123": "fullsend-web-123"}, nil, journal); got != "failed" {
+		t.Fatalf("unexpected failed summary: %q", got)
+	}
+}
+
+func TestDeployOutputHelpers(t *testing.T) {
+	if got := shortSHA("1234567890abcdef"); got != "1234567890ab" {
+		t.Fatalf("unexpected short sha: %q", got)
+	}
+	if got := shortSHA("abc123"); got != "abc123" {
+		t.Fatalf("unexpected short sha: %q", got)
+	}
+
+	app := AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend", Hosts: []string{"fullsend.nobrainer.host"}}
+	if got := appLiveURL(app); got != "https://fullsend.nobrainer.host" {
+		t.Fatalf("unexpected live URL: %q", got)
+	}
+	if got := appLiveURL(AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"}); got != "" {
+		t.Fatalf("expected no live URL, got %q", got)
+	}
+}
+
 type errTestDockerUnavailable struct{}
 
 func (errTestDockerUnavailable) Error() string {

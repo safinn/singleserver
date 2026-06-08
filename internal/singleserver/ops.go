@@ -271,7 +271,7 @@ func cliDomainChange(args []string, add bool, w io.Writer, logger *log.Logger) e
 		return nil
 	}
 	fmt.Fprintf(w, "%s\tdeploy\tstart\tapplying domain change\n", app.Name)
-	if err := cliDeploy([]string{app.Repo}, logger); err != nil {
+	if err := cliDeploy([]string{app.Repo}, w, logger); err != nil {
 		return err
 	}
 	return cliDoctor([]string{app.Name}, w)

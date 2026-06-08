@@ -147,7 +147,7 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 
 	if !opts.noDeploy {
 		fmt.Fprintf(w, "%s\tdeploy\tstart\t%s\n", app.Name, targetBranch)
-		if err := cliDeploy([]string{opts.repo, targetBranch}, logger); err != nil {
+		if err := cliDeploy([]string{opts.repo, targetBranch}, w, logger); err != nil {
 			return err
 		}
 		return cliDoctor(nil, w)

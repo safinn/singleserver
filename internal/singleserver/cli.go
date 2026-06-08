@@ -41,7 +41,7 @@ func RunCLI(args []string, logger *log.Logger) error {
 	case "add":
 		return cliAdd(args[1:], os.Stdout, logger)
 	case "deploy":
-		return cliDeploy(args[1:], logger)
+		return cliDeploy(args[1:], os.Stdout, logger)
 	case "render-deploy":
 		return cliRenderDeploy(args[1:], os.Stdout)
 	case "doctor":
@@ -115,8 +115,10 @@ func cliList(w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	containers, containerErr := runningAppContainers()
+	journal, _ := recentSingleServerJournal()
 	for _, app := range config.Apps {
-		fmt.Fprintf(w, "%s\t%s\tbranch=%s\thosts=%s\thealthcheck=%s\n", app.Name, app.Repo, displayBranch(app), displayHosts(app), displayHealthcheck(app))
+		fmt.Fprintf(w, "%s\t%s\tbranch=%s\thosts=%s\tstatus=%s\thealthcheck=%s\n", app.Name, app.Repo, displayBranch(app), displayHosts(app), appSummaryStatus(app, containers, containerErr, journal), displayHealthcheck(app))
 	}
 	return nil
 }
@@ -136,9 +138,14 @@ func cliStatus(w io.Writer) error {
 		return err
 	}
 	containers, containerErr := runningAppContainers()
+	journal, _ := recentSingleServerJournal()
 	for _, app := range config.Apps {
 		runtime := appRuntimeStatus(app, containers, containerErr)
-		prefix := fmt.Sprintf("%s\t%s\tbranch=%s\thosts=%s\truntime=%s", app.Name, app.Repo, displayBranch(app), displayHosts(app), runtime)
+		lastDeploy, lastDeployDetail := lastDeployStatusFromJournal(app.Name, journal)
+		prefix := fmt.Sprintf("%s\t%s\tbranch=%s\thosts=%s\tstatus=%s\truntime=%s\tlast_deploy=%s", app.Name, app.Repo, displayBranch(app), displayHosts(app), appSummaryStatus(app, containers, containerErr, journal), runtime, lastDeploy)
+		if lastDeployDetail != "" {
+			prefix += "\t" + lastDeployDetail
+		}
 		if app.Healthcheck == "" {
 			fmt.Fprintf(w, "%s\thealthcheck=unknown\tno healthcheck configured\n", prefix)
 			continue
@@ -152,6 +159,27 @@ func cliStatus(w io.Writer) error {
 		fmt.Fprintf(w, "%s\thealthcheck=%s%s\n", prefix, status, detail)
 	}
 	return nil
+}
+
+func appSummaryStatus(app AppConfig, containers map[string]string, containerErr error, journal string) string {
+	if app.Healthcheck != "" {
+		if err := checkURL(app.Healthcheck); err != nil {
+			return "failed"
+		}
+		return "ok"
+	}
+	if status, _ := lastDeployStatusFromJournal(app.Name, journal); status == "failed" {
+		return "failed"
+	}
+	runtime := appRuntimeStatus(app, containers, containerErr)
+	switch {
+	case strings.HasPrefix(runtime, "running:"):
+		return "running"
+	case runtime == "stopped":
+		return "stopped"
+	default:
+		return "unknown"
+	}
 }
 
 func displayBranch(app AppConfig) string {
@@ -185,7 +213,7 @@ func appRuntimeStatus(app AppConfig, containers map[string]string, err error) st
 	return "stopped"
 }
 
-func cliDeploy(args []string, logger *log.Logger) error {
+func cliDeploy(args []string, w io.Writer, logger *log.Logger) error {
 	if len(args) < 1 || len(args) > 2 {
 		return errors.New("usage: singleserver deploy <owner/repo> [ref]")
 	}
@@ -229,7 +257,7 @@ func cliDeploy(args []string, logger *log.Logger) error {
 	}
 
 	manager := NewDeployManager(logger, github)
-	return manager.run(DeployRequest{
+	timing, err := manager.run(DeployRequest{
 		App:            *app,
 		Repo:           repo,
 		Branch:         ref,
@@ -237,6 +265,32 @@ func cliDeploy(args []string, logger *log.Logger) error {
 		InstallationID: installationID,
 		RunID:          fmt.Sprintf("%s-manual-%d", app.Name, time.Now().UnixMilli()),
 	})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "%s\tdeploy\tok\t%dms\tref=%s\tsha=%s\n", app.Name, timing.TotalMS, ref, shortSHA(sha))
+	if app.Healthcheck != "" {
+		fmt.Fprintf(w, "%s\thealthcheck\tok\t%s\n", app.Name, app.Healthcheck)
+	}
+	if liveURL := appLiveURL(*app); liveURL != "" {
+		fmt.Fprintf(w, "%s\tlive\tok\t%s\n", app.Name, liveURL)
+	}
+	return nil
+}
+
+func shortSHA(sha string) string {
+	sha = strings.TrimSpace(sha)
+	if len(sha) <= 12 {
+		return sha
+	}
+	return sha[:12]
+}
+
+func appLiveURL(app AppConfig) string {
+	if len(app.Hosts) == 0 {
+		return ""
+	}
+	return "https://" + app.Hosts[0]
 }
 
 func cliRenderDeploy(args []string, w io.Writer) error {
