@@ -19,7 +19,7 @@ one SSH session and one guided init:
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
 singleserver init
-singleserver add me/my-app --deploy
+singleserver add me/my-app
 ```
 
 After that, every push to the configured branch deploys automatically.
@@ -148,12 +148,12 @@ All follow-up commands continue to run on the server over SSH.
 
 ## Adding Apps
 
-### Add And Deploy
+### Add An App
 
 Ideal command:
 
 ```sh
-singleserver add me/my-app --deploy
+singleserver add me/my-app
 ```
 
 This should:
@@ -187,7 +187,7 @@ my-app healthcheck ok https://my-app.example.com/up
 ### Add Without Deploying
 
 ```sh
-singleserver add me/my-app
+singleserver add me/my-app --no-deploy
 ```
 
 This should configure the app but wait for the next push or manual deploy.
@@ -199,8 +199,7 @@ singleserver add me/my-app \
   --branch production \
   --app-port 3000 \
   --healthcheck-path /health \
-  --healthcheck https://my-app.example.com/health \
-  --deploy
+  --healthcheck https://my-app.example.com/health
 ```
 
 Most apps should not need overrides.
@@ -254,7 +253,7 @@ CMD ["bun", "start"]
 Then add it with:
 
 ```sh
-singleserver add me/my-node-app --app-port 3000 --deploy
+singleserver add me/my-node-app --app-port 3000
 ```
 
 ## Managing Apps
@@ -387,7 +386,7 @@ This is the complete happy path we should optimize for:
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
 singleserver init
-singleserver add me/homepage --deploy
+singleserver add me/homepage
 ```
 
 Then:
@@ -411,7 +410,7 @@ Status key:
 | Central `apps.yml` allowlist | Built | Pushes for unlisted repos are ignored. |
 | GitHub App push deploys | Built | The GitHub App provides webhooks and installation tokens. |
 | Generated Kamal config | Built | Repos do not need `config/deploy.yml` unless they want custom behavior. |
-| `singleserver add` | Partial | Adds apps, validates GitHub access, checks `Dockerfile`, supports explicit hosts and optional deploy. Default host inference and DNS automation are not built. |
+| `singleserver add` | Partial | Adds apps, validates GitHub access, checks `Dockerfile`, supports explicit hosts and optional deploy. Target behavior is deploy-by-default with a `--no-deploy` escape hatch. Default host inference and DNS automation are not built. |
 | `singleserver doctor` | Partial | Checks daemon, config, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. Needs disk, Docker, proxy, and DNS checks. |
 | Installer script | Needed | Should install Docker, Kamal, Single Server, systemd service, and base config. |
 | `singleserver init` | Needed | Should configure host environment, Cloudflare Tunnel, and GitHub App connection. No user-facing host domain required. |

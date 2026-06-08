@@ -146,8 +146,9 @@ singleserver logs fullsend
 default branch and `Dockerfile`, appends the app to `/etc/singleserver/apps.yml`,
 and validates the generated Kamal config. Pass `--deploy` to immediately deploy
 the current branch tip and run `doctor` afterward. The intended product flow is
-`singleserver init` followed by `singleserver add owner/repo --deploy`; today the
-CLI still accepts explicit `--host` values for public routes.
+`singleserver init` followed by `singleserver add owner/repo`; today the CLI
+still accepts explicit `--host` values for public routes and requires `--deploy`
+to ship immediately.
 
 `singleserver deploy <owner/repo> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
 

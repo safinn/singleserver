@@ -92,7 +92,7 @@
         }
 
         h2 a::after {
-            content: "->";
+            content: "\2192";
             font-size: 0.8em;
             color: #999;
             transition: color 0.2s, transform 0.2s;
@@ -331,7 +331,7 @@
             <div class="command-item">
                 <p class="step-desc">Add an app and ship it.</p>
                 <div class="code-wrapper">
-                    <code class="code-block">singleserver <span class="keyword">add</span> me/my-app <span class="flag">--deploy</span></code>
+                    <code class="code-block">singleserver <span class="keyword">add</span> me/my-app</code>
                     <button class="copy-btn" aria-label="Copy to clipboard">
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                     </button>
@@ -357,22 +357,22 @@
         <div class="flow-box" id="flow">
             <div class="flow-row">
                 <span class="pill">git push</span>
-                <span class="connector">-&gt;</span>
+                <span class="connector">&rarr;</span>
                 <span class="result">GitHub sends one signed webhook</span>
             </div>
             <div class="flow-row">
                 <span class="pill">allow</span>
-                <span class="connector">-&gt;</span>
+                <span class="connector">&rarr;</span>
                 <span class="result">Only apps added on the server can deploy</span>
             </div>
             <div class="flow-row">
                 <span class="pill">build</span>
-                <span class="connector">-&gt;</span>
+                <span class="connector">&rarr;</span>
                 <span class="result">The server builds the image from that commit</span>
             </div>
             <div class="flow-row">
                 <span class="pill">live</span>
-                <span class="connector">-&gt;</span>
+                <span class="connector">&rarr;</span>
                 <span class="result">Kamal swaps the container and posts commit status</span>
             </div>
         </div>
@@ -415,17 +415,17 @@
         <div class="flow-box" id="contract">
             <div class="flow-row">
                 <span class="pill">Dockerfile</span>
-                <span class="connector">-&gt;</span>
+                <span class="connector">&rarr;</span>
                 <span class="result">Single Server can build it</span>
             </div>
             <div class="flow-row">
                 <span class="pill">port 80</span>
-                <span class="connector">-&gt;</span>
+                <span class="connector">&rarr;</span>
                 <span class="result">Default app port, override when needed</span>
             </div>
             <div class="flow-row">
                 <span class="pill">/up</span>
-                <span class="connector">-&gt;</span>
+                <span class="connector">&rarr;</span>
                 <span class="result">Default healthcheck path</span>
             </div>
         </div>
