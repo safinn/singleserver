@@ -37,8 +37,10 @@ func createStorageBackup(appName string, storagePath string, backupDir string) (
 	if err := os.MkdirAll(backupDir, 0700); err != nil {
 		return StorageBackupResult{}, err
 	}
-	backupID := time.Now().UTC().Format("20060102T150405Z")
-	backupPath := filepath.Join(backupDir, backupID+".tar.gz")
+	backupPath, err := nextBackupPath(backupDir, time.Now())
+	if err != nil {
+		return StorageBackupResult{}, err
+	}
 	snapshotDir, err := os.MkdirTemp(backupDir, ".snapshot-"+appName+"-*")
 	if err != nil {
 		return StorageBackupResult{}, err
@@ -53,6 +55,23 @@ func createStorageBackup(appName string, storagePath string, backupDir string) (
 		return StorageBackupResult{}, err
 	}
 	return StorageBackupResult{Path: backupPath, Files: files, SQLiteFiles: sqliteFiles}, nil
+}
+
+func nextBackupPath(backupDir string, now time.Time) (string, error) {
+	backupID := now.UTC().Format("20060102T150405Z")
+	for suffix := 0; suffix < 1000; suffix++ {
+		name := backupID
+		if suffix > 0 {
+			name = fmt.Sprintf("%s-%d", backupID, suffix)
+		}
+		path := filepath.Join(backupDir, name+".tar.gz")
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return path, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("could not allocate backup path for %s", backupID)
 }
 
 func snapshotStorage(source string, dest string) (int, int, error) {
