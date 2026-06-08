@@ -161,6 +161,7 @@ singleserver domains add fullsend play.example.com
 singleserver storage enable fullsend --mount /storage
 singleserver backup fullsend
 singleserver restore fullsend 20260608T181500Z --yes
+singleserver remove fullsend --delete-repo --delete-storage --yes
 ```
 
 `singleserver github connect --public` creates a public/installable GitHub App
@@ -198,6 +199,10 @@ under `/srv/backups/<app>`. SQLite database files are copied with SQLite's backu
 API before the archive is written. `singleserver restore <app> <backup-id> --yes`
 replaces the storage directory, keeps the previous copy next to it, and restarts
 the app containers unless `--no-restart` is passed.
+
+`singleserver remove <app>` removes config, routes, and containers. It keeps the
+repo checkout and persistent storage by default. Pass `--delete-repo --yes` or
+`--delete-storage --yes` to delete those files explicitly.
 
 ## Adding An App
 

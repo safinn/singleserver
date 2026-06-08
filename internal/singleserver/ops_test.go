@@ -192,13 +192,18 @@ func TestRemoveDeleteStorageRequiresConfirmation(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	storagePath := filepath.Join(dir, "storage")
+	repoPath := filepath.Join(dir, "repos", "fullsend")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.MkdirAll(storagePath, 0700); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(repoPath, 0700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(configPath, []byte(`apps:
   - repo: dvassallo/fullsend
+    path: `+repoPath+`
     storage:
       path: `+storagePath+`
       mount: /storage
@@ -214,6 +219,9 @@ func TestRemoveDeleteStorageRequiresConfirmation(t *testing.T) {
 	if _, err := os.Stat(storagePath); err != nil {
 		t.Fatalf("expected storage kept: %v", err)
 	}
+	if _, err := os.Stat(repoPath); err != nil {
+		t.Fatalf("expected repo checkout kept: %v", err)
+	}
 	config, err := LoadConfig(configPath)
 	if err != nil {
 		t.Fatal(err)
@@ -227,16 +235,24 @@ func TestRemoveDeleteStorageWithConfirmation(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")
 	storagePath := filepath.Join(dir, "storage")
+	repoPath := filepath.Join(dir, "repos", "fullsend")
 	t.Setenv("SINGLESERVER_CONFIG", configPath)
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	if err := os.MkdirAll(storagePath, 0700); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(repoPath, 0700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(storagePath, "data.txt"), []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("old"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(configPath, []byte(`apps:
   - repo: dvassallo/fullsend
+    path: `+repoPath+`
     storage:
       path: `+storagePath+`
       mount: /storage
@@ -245,11 +261,14 @@ func TestRemoveDeleteStorageWithConfirmation(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cliRemove([]string{"fullsend", "--delete-storage", "--yes"}, &out); err != nil {
+	if err := cliRemove([]string{"fullsend", "--delete-storage", "--delete-repo", "--yes"}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(storagePath); !os.IsNotExist(err) {
 		t.Fatalf("expected storage deleted, stat err=%v", err)
+	}
+	if _, err := os.Stat(repoPath); !os.IsNotExist(err) {
+		t.Fatalf("expected repo checkout deleted, stat err=%v", err)
 	}
 	config, err := LoadConfig(configPath)
 	if err != nil {

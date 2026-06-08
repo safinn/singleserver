@@ -187,15 +187,16 @@ func cliRemove(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
 	fs.SetOutput(w)
 	deleteStorage := fs.Bool("delete-storage", false, "delete persistent storage")
-	yes := fs.Bool("yes", false, "confirm persistent storage deletion")
+	deleteRepo := fs.Bool("delete-repo", false, "delete repository checkout")
+	yes := fs.Bool("yes", false, "confirm destructive deletion")
 	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: singleserver remove <app> [--delete-storage --yes]")
+		return errors.New("usage: singleserver remove <app> [--delete-storage] [--delete-repo] --yes")
 	}
-	if *deleteStorage && !*yes {
-		return errors.New("remove --delete-storage deletes app storage; rerun with --delete-storage --yes to confirm")
+	if (*deleteStorage || *deleteRepo) && !*yes {
+		return errors.New("remove deletes app files; rerun with --yes to confirm")
 	}
 	appName := fs.Arg(0)
 	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
@@ -237,6 +238,14 @@ func cliRemove(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "%s\tstorage\tok\tdeleted %s\n", app.Name, app.Storage.Path)
 	} else if app.Storage != nil {
 		fmt.Fprintf(w, "%s\tstorage\tkept\t%s\n", app.Name, app.Storage.Path)
+	}
+	if *deleteRepo {
+		if err := os.RemoveAll(app.RepoDir); err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "%s\trepo\tok\tdeleted %s\n", app.Name, app.RepoDir)
+	} else {
+		fmt.Fprintf(w, "%s\trepo\tkept\t%s\n", app.Name, app.RepoDir)
 	}
 	return nil
 }
