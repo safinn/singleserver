@@ -316,6 +316,7 @@ Manual deploys should use the same path as push-triggered deploys.
 singleserver logs
 singleserver logs my-app
 singleserver logs my-app --follow
+singleserver logs --daemon
 ```
 
 The default view should show deploy logs. App runtime logs should be available

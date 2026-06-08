@@ -227,4 +227,5 @@ singleserver logs
 singleserver logs app-name
 singleserver logs app-name --runtime
 singleserver logs app-name --follow
+singleserver logs --daemon
 ```

@@ -99,7 +99,7 @@ Commands:
   deploy         Deploy a configured app immediately.
   render-deploy  Print the generated Kamal deploy.yml for a configured app.
   doctor         Check config, deploy plumbing, GitHub App access, checkouts, deploy logs, and healthchecks.
-  logs           Show recent Single Server journal logs, optionally filtered by app.
+  logs           Show recent deploy logs, optionally filtered by app.
   domains        Manage app domains in apps.yml.
   env            Manage server-side app environment variables.
   storage        Manage persistent app storage.
@@ -325,11 +325,15 @@ func cliLogs(args []string, w io.Writer) error {
 	fs.SetOutput(w)
 	follow := fs.Bool("follow", false, "follow logs")
 	runtimeLogs := fs.Bool("runtime", false, "show app container logs")
+	daemonLogs := fs.Bool("daemon", false, "show full Single Server daemon journal")
 	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
 		return err
 	}
 	if fs.NArg() > 1 {
-		return errors.New("usage: singleserver logs [app] [--follow] [--runtime]")
+		return errors.New("usage: singleserver logs [app] [--follow] [--runtime] [--daemon]")
+	}
+	if *runtimeLogs && *daemonLogs {
+		return errors.New("usage: singleserver logs [app] [--follow] [--runtime] [--daemon]")
 	}
 
 	filter := ""
@@ -356,27 +360,60 @@ func cliLogs(args []string, w io.Writer) error {
 		return runCommandToWriter(w, 0, "docker", logArgs...)
 	}
 
+	logAppName := ""
+	if filter != "" {
+		app, err := configuredApp(filter)
+		if err != nil {
+			return err
+		}
+		logAppName = app.Name
+	}
+
 	journalArgs := []string{"-u", "singleserver.service", "-n", "200", "--no-pager", "-o", "short-iso"}
 	if *follow {
 		journalArgs = append(journalArgs, "-f")
 	}
 	if *follow {
-		if filter == "" {
+		grep := journalLogNeedle(logAppName, *daemonLogs)
+		if grep == "" {
 			return runCommandToWriter(w, 0, "journalctl", journalArgs...)
 		}
-		script := "journalctl -u singleserver.service -n 200 --no-pager -o short-iso -f | grep --line-buffered -F " + shellQuote(filter)
+		script := "journalctl -u singleserver.service -n 200 --no-pager -o short-iso -f | grep --line-buffered -F " + shellQuote(grep)
 		return runCommandToWriter(w, 0, "bash", "-lc", script)
 	}
 	out, err := commandOutput(5*time.Second, "journalctl", journalArgs...)
 	if err != nil {
 		return err
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if filter == "" || strings.Contains(line, filter) {
-			fmt.Fprintln(w, line)
-		}
+	for _, line := range filterJournalLogLines(string(out), logAppName, *daemonLogs) {
+		fmt.Fprintln(w, line)
 	}
 	return nil
+}
+
+func journalLogNeedle(appName string, daemonLogs bool) string {
+	if daemonLogs {
+		return appName
+	}
+	if appName == "" {
+		return "[deploy:"
+	}
+	return "[deploy:" + appName + "-"
+}
+
+func filterJournalLogLines(journal string, appName string, daemonLogs bool) []string {
+	needle := journalLogNeedle(appName, daemonLogs)
+	lines := []string{}
+	for _, line := range strings.Split(journal, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			continue
+		}
+		if needle == "" || strings.Contains(line, needle) {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func checkURL(url string) error {

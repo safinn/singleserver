@@ -635,13 +635,14 @@
                 <div class="command-heading">
                     <span class="command-name">View logs</span>
                     <code class="command-usage">singleserver logs [app] [options]</code>
-                    <p class="command-description">Shows deploy logs by default. Filter by app name when provided, use <code>--runtime</code> for app container logs, and use <code>--follow</code> to stream.</p>
+                    <p class="command-description">Shows deploy logs by default. Filter by app name when provided, use <code>--runtime</code> for app container logs, <code>--daemon</code> for the full Single Server journal, and <code>--follow</code> to stream.</p>
                 </div>
                 <div class="command-details">
                     <p class="option-heading">Options for <code>singleserver logs</code></p>
                     <ul class="option-list">
-                        <li><code>[app]</code><span>Optional app name or repository. Without it, Single Server shows daemon and deploy logs.</span></li>
+                        <li><code>[app]</code><span>Optional app name or repository. Without it, Single Server shows recent deploy logs for all apps.</span></li>
                         <li><code>--runtime</code><span>Show logs from the app container instead of the Single Server daemon journal. Requires an app.</span></li>
+                        <li><code>--daemon</code><span>Show the full Single Server service journal instead of only deploy lines.</span></li>
                         <li><code>--follow</code><span>Stream new log lines instead of printing the recent tail.</span></li>
                     </ul>
                 </div>

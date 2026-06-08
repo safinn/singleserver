@@ -1,6 +1,9 @@
 package singleserver
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDisplayAppDefaults(t *testing.T) {
 	app := AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"}
@@ -93,6 +96,28 @@ func TestDeployOutputHelpers(t *testing.T) {
 	}
 	if got := appLiveURL(AppConfig{Repo: "dvassallo/fullsend", Name: "fullsend"}); got != "" {
 		t.Fatalf("expected no live URL, got %q", got)
+	}
+}
+
+func TestFilterJournalLogLinesDefaultsToDeployLogs(t *testing.T) {
+	journal := strings.Join([]string{
+		"2026-06-08T10:00:00 [server] Single Server listening",
+		"2026-06-08T10:00:01 [deploy:fullsend-123] start dvassallo/fullsend@abc",
+		"2026-06-08T10:00:02 [deploy:userbase-homepage-456] success total_ms=42",
+		"2026-06-08T10:00:03 [webhook:delivery] ping",
+	}, "\n")
+
+	allDeploys := filterJournalLogLines(journal, "", false)
+	if len(allDeploys) != 2 {
+		t.Fatalf("expected two deploy lines, got %#v", allDeploys)
+	}
+	fullsendDeploys := filterJournalLogLines(journal, "fullsend", false)
+	if len(fullsendDeploys) != 1 || !strings.Contains(fullsendDeploys[0], "[deploy:fullsend-123]") {
+		t.Fatalf("expected fullsend deploy line, got %#v", fullsendDeploys)
+	}
+	daemonLines := filterJournalLogLines(journal, "", true)
+	if len(daemonLines) != 4 {
+		t.Fatalf("expected full daemon journal, got %#v", daemonLines)
 	}
 }
 
