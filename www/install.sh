@@ -90,10 +90,10 @@ elif ! docker ps --format '{{.Names}}' | grep -qx singleserver-registry; then
   docker start singleserver-registry
 fi
 
-/usr/local/bin/singleserver init
-
 systemctl daemon-reload
 systemctl enable --now singleserver.service
+
+/usr/local/bin/singleserver init
 
 echo
 echo "Single Server installed."

@@ -43,7 +43,10 @@ func cliInit(args []string, w io.Writer) error {
 
 	_ = commandRun(10*time.Second, "systemctl", "daemon-reload")
 	_ = commandRun(10*time.Second, "systemctl", "restart", "singleserver.service")
-	return cliGitHubConnect(nil, w)
+	if err := cliGitHubConnect(nil, w); err != nil {
+		return err
+	}
+	return cliDoctor(nil, w)
 }
 
 func cliGitHubConnect(args []string, w io.Writer) error {
