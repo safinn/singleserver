@@ -136,19 +136,20 @@ Install the daemon binary as both `/usr/local/bin/singleserverd` and `/usr/local
 ssh root@203.0.113.10
 singleserver list
 singleserver status
-singleserver add owner/repo --host example.com --host www.example.com
+singleserver add https://github.com/owner/repo --host example.com --host www.example.com
 singleserver deploy dvassallo/fullsend
 singleserver render-deploy smallbets/userbase-homepage
 singleserver logs fullsend
 ```
 
-`singleserver add <owner/repo>` validates GitHub App access, checks the repo's
-default branch and `Dockerfile`, appends the app to `/etc/singleserver/apps.yml`,
-and validates the generated Kamal config. Pass `--deploy` to immediately deploy
-the current branch tip and run `doctor` afterward. The intended product flow is
-`singleserver init` followed by `singleserver add owner/repo`; today the CLI
-still accepts explicit `--host` values for public routes and requires `--deploy`
-to ship immediately.
+`singleserver add <github-url>` validates GitHub App access, checks the repo's
+default branch and `Dockerfile`, appends the normalized `owner/repo` to
+`/etc/singleserver/apps.yml`, and validates the generated Kamal config. Pass
+`--deploy` to immediately deploy the current branch tip and run `doctor`
+afterward. The intended product flow is `singleserver init` followed by
+`singleserver add https://github.com/owner/repo`; today the CLI still accepts
+explicit `--host` values for public routes and requires `--deploy` to ship
+immediately.
 
 `singleserver deploy <owner/repo> [ref]` runs the same deploy path as a push webhook. If `ref` is omitted, Single Server deploys the configured branch or the repository default branch.
 
@@ -162,7 +163,7 @@ for a configured app. It does not inspect or modify the app repository.
 3. Add it from the server. Current implementation:
 
 ```sh
-singleserver add owner/repo --host example.com --host www.example.com --deploy
+singleserver add https://github.com/owner/repo --host example.com --host www.example.com --deploy
 ```
 
 Future pushes to the configured branch deploy automatically.

@@ -32,6 +32,34 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 	}
 }
 
+func TestParseAddArgsAcceptsGitHubURL(t *testing.T) {
+	tests := []struct {
+		arg  string
+		want string
+	}{
+		{"https://github.com/smallbets/userbase-homepage", "smallbets/userbase-homepage"},
+		{"https://github.com/smallbets/userbase-homepage.git", "smallbets/userbase-homepage"},
+		{"https://github.com/smallbets/userbase-homepage/", "smallbets/userbase-homepage"},
+	}
+
+	for _, tt := range tests {
+		opts, err := parseAddArgs([]string{tt.arg}, io.Discard)
+		if err != nil {
+			t.Fatalf("%s: %v", tt.arg, err)
+		}
+		if opts.repo != tt.want {
+			t.Fatalf("%s: got %s, want %s", tt.arg, opts.repo, tt.want)
+		}
+	}
+}
+
+func TestParseAddArgsRejectsNonGitHubURL(t *testing.T) {
+	_, err := parseAddArgs([]string{"https://example.com/smallbets/userbase-homepage"}, io.Discard)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestAddOptionsAppInfersHealthcheckFromFirstHost(t *testing.T) {
 	opts := addOptions{
 		repo:            "smallbets/userbase-homepage",

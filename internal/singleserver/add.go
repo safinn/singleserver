@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -175,10 +176,43 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	})
 
 	if fs.NArg() != 1 {
-		return addOptions{}, errors.New("usage: singleserver add <owner/repo> [--host host] [--deploy]")
+		return addOptions{}, errors.New("usage: singleserver add <github-url> [--host host] [--deploy]")
 	}
-	opts.repo = strings.TrimSpace(fs.Arg(0))
+	repo, err := normalizeRepoArg(fs.Arg(0))
+	if err != nil {
+		return addOptions{}, err
+	}
+	opts.repo = repo
 	return opts, nil
+}
+
+func normalizeRepoArg(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if repoPattern.MatchString(value) {
+		return value, nil
+	}
+
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme == "" {
+		return value, nil
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return "", fmt.Errorf("repository URL must use https: %s", value)
+	}
+	if !strings.EqualFold(parsed.Host, "github.com") {
+		return "", fmt.Errorf("repository URL must be on github.com: %s", value)
+	}
+	path := strings.Trim(parsed.Path, "/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("repository URL must look like https://github.com/owner/repo: %s", value)
+	}
+	repoName := strings.TrimSuffix(parts[1], ".git")
+	repo := parts[0] + "/" + repoName
+	if !repoPattern.MatchString(repo) {
+		return "", fmt.Errorf("invalid GitHub repository URL: %s", value)
+	}
+	return repo, nil
 }
 
 func (o addOptions) app() (AppConfig, addAppEntry, error) {

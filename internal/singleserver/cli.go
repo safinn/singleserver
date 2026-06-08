@@ -47,7 +47,7 @@ func printUsage(w io.Writer) {
 Usage:
   singleserver list
   singleserver status
-  singleserver add <owner/repo> [--host host] [--deploy]
+  singleserver add <github-url> [--host host] [--deploy]
   singleserver deploy <owner/repo> [ref]
   singleserver render-deploy <owner/repo>
   singleserver doctor

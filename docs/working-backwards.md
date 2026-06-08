@@ -19,7 +19,7 @@ one SSH session and one guided init:
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
 singleserver init
-singleserver add me/my-app
+singleserver add https://github.com/you/my-app
 ```
 
 After that, every push to the configured branch deploys automatically.
@@ -153,12 +153,12 @@ All follow-up commands continue to run on the server over SSH.
 Ideal command:
 
 ```sh
-singleserver add me/my-app
+singleserver add https://github.com/you/my-app
 ```
 
 This should:
 
-- Verify the GitHub App can access `me/my-app`
+- Verify the GitHub App can access `https://github.com/you/my-app`
 - Detect the default branch
 - Check that the repo contains a `Dockerfile`
 - Add the app to `/etc/singleserver/apps.yml`
@@ -187,7 +187,7 @@ my-app healthcheck ok https://my-app.example.com/up
 ### Add Without Deploying
 
 ```sh
-singleserver add me/my-app --no-deploy
+singleserver add https://github.com/you/my-app --no-deploy
 ```
 
 This should configure the app but wait for the next push or manual deploy.
@@ -195,7 +195,7 @@ This should configure the app but wait for the next push or manual deploy.
 ### Add With Overrides
 
 ```sh
-singleserver add me/my-app \
+singleserver add https://github.com/you/my-app \
   --branch production \
   --app-port 3000 \
   --healthcheck-path /health \
@@ -253,7 +253,7 @@ CMD ["bun", "start"]
 Then add it with:
 
 ```sh
-singleserver add me/my-node-app --app-port 3000
+singleserver add https://github.com/you/my-node-app --app-port 3000
 ```
 
 ## Managing Apps
@@ -267,7 +267,7 @@ singleserver list
 Ideal output:
 
 ```text
-my-app  me/my-app  branch=main  hosts=my-app.example.com  status=ok
+my-app  you/my-app  branch=main  hosts=my-app.example.com  status=ok
 ```
 
 ### Check The Server
@@ -293,8 +293,8 @@ This should verify:
 ### Deploy Manually
 
 ```sh
-singleserver deploy me/my-app
-singleserver deploy me/my-app abc1234
+singleserver deploy you/my-app
+singleserver deploy you/my-app abc1234
 ```
 
 Manual deploys should use the same path as push-triggered deploys.
@@ -386,7 +386,7 @@ This is the complete happy path we should optimize for:
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
 singleserver init
-singleserver add me/homepage
+singleserver add https://github.com/you/homepage
 ```
 
 Then:
