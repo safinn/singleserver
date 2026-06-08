@@ -80,7 +80,7 @@ Generated Kamal config defaults:
 ```text
 service/image:      app name
 server host:        127.0.0.1
-ssh user/key:       deploy, ~/.ssh/id_ed25519
+ssh user/key:       deploy, /root/.ssh/id_ed25519
 registry:           127.0.0.1:5555
 builder:            local Docker builder for the server architecture
 proxy app_port:     80

@@ -34,6 +34,15 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 		t.Fatalf("unexpected builder arch: %v", builder["arch"])
 	}
 
+	ssh := config["ssh"].(map[string]any)
+	if ssh["user"] != "deploy" {
+		t.Fatalf("unexpected ssh user: %v", ssh["user"])
+	}
+	keys := ssh["keys"].([]any)
+	if len(keys) != 1 || keys[0] != "/root/.ssh/id_ed25519" {
+		t.Fatalf("unexpected ssh keys: %#v", keys)
+	}
+
 	proxy := config["proxy"].(map[string]any)
 	if proxy["app_port"] != 8080 {
 		t.Fatalf("unexpected app_port: %v", proxy["app_port"])

@@ -86,7 +86,7 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 		},
 		SSH: kamalSSH{
 			User: "deploy",
-			Keys: []string{"~/.ssh/id_ed25519"},
+			Keys: []string{"/root/.ssh/id_ed25519"},
 		},
 		Registry: kamalRegistry{
 			Server:   "127.0.0.1:5555",

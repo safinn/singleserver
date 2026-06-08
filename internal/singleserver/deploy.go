@@ -141,6 +141,7 @@ cd "$repo_dir"
 git remote set-url origin "$remote_url"
 git fetch --depth=1 origin "$sha"
 git reset --hard "$sha"
+git clean -fdx
 git remote set-url origin "https://github.com/${repo}.git"
 
 git_done_ms=$(now_ms)
