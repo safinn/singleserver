@@ -1,6 +1,16 @@
 package singleserver
 
-import "testing"
+import (
+	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestDoctorAppsReturnsAllWhenNoFilter(t *testing.T) {
 	apps := []AppConfig{
@@ -48,6 +58,55 @@ func TestDoctorAppsRejectsUnknownAndExtraArgs(t *testing.T) {
 	}
 	if _, err := doctorApps(apps, []string{"fullsend", "extra"}); err == nil {
 		t.Fatal("expected extra args to fail")
+	}
+}
+
+func TestDoctorGitHubSetupPendingWithoutApps(t *testing.T) {
+	var out bytes.Buffer
+	ok := doctorGitHubSetup(&out, NewGitHubClient(t.TempDir()), 0)
+
+	if !ok {
+		t.Fatal("expected missing GitHub setup to be non-fatal with no apps")
+	}
+	if !strings.Contains(out.String(), "github\tsetup\tpending") {
+		t.Fatalf("expected pending setup output, got %q", out.String())
+	}
+}
+
+func TestDoctorGitHubSetupFailsWithConfiguredApps(t *testing.T) {
+	var out bytes.Buffer
+	ok := doctorGitHubSetup(&out, NewGitHubClient(t.TempDir()), 1)
+
+	if ok {
+		t.Fatal("expected missing GitHub setup to fail with configured apps")
+	}
+	if !strings.Contains(out.String(), "github\tsetup\tfailed") {
+		t.Fatalf("expected failed setup output, got %q", out.String())
+	}
+}
+
+func TestDoctorGitHubSetupOK(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "github-app.json"), []byte(`{"app_id":123,"slug":"single-server-test","webhook_secret":"secret"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemBody := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	if err := os.WriteFile(filepath.Join(dir, "github-app.private-key.pem"), pemBody, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	ok := doctorGitHubSetup(&out, NewGitHubClient(dir), 0)
+
+	if !ok {
+		t.Fatal("expected complete GitHub setup to pass")
+	}
+	if !strings.Contains(out.String(), "github\tsetup\tok\tapp_id=123\tslug=single-server-test") {
+		t.Fatalf("expected ok setup output, got %q", out.String())
 	}
 }
 

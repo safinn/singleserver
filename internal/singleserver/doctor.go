@@ -56,6 +56,9 @@ func cliDoctor(args []string, w io.Writer) error {
 	}
 
 	github := NewGitHubClient(envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver"))
+	if !doctorGitHubSetup(w, github, len(config.Apps)) {
+		failed = true
+	}
 	for _, app := range apps {
 		fmt.Fprintf(w, "app\t%s\t%s\n", app.Name, app.Repo)
 		if !doctorGitHubInstallation(w, github, app) {
@@ -207,6 +210,28 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 	}
 
 	return !failed
+}
+
+func doctorGitHubSetup(w io.Writer, github *GitHubClient, appCount int) bool {
+	secrets, err := github.LoadSecrets()
+	if err != nil {
+		status := "pending"
+		if appCount > 0 {
+			status = "failed"
+		}
+		fmt.Fprintf(w, "github\tsetup\t%s\trun `singleserver github connect`\t%s\n", status, err)
+		return appCount == 0
+	}
+	if _, err := github.loadPrivateKey(); err != nil {
+		status := "pending"
+		if appCount > 0 {
+			status = "failed"
+		}
+		fmt.Fprintf(w, "github\tsetup\t%s\tprivate key unavailable\t%s\n", status, err)
+		return appCount == 0
+	}
+	fmt.Fprintf(w, "github\tsetup\tok\tapp_id=%d\tslug=%s\n", secrets.AppID, valueOrDash(secrets.Slug))
+	return true
 }
 
 func doctorApps(apps []AppConfig, args []string) ([]AppConfig, error) {
