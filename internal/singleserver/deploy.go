@@ -114,6 +114,13 @@ now_ms() {
   echo "$(($(date +%s%N) / 1000000))"
 }
 
+ignore_checkout_path() {
+  path="$1"
+  if ! grep -qxF "$path" .git/info/exclude; then
+    printf '\n%s\n' "$path" >> .git/info/exclude
+  fi
+}
+
 start_ms=$(now_ms)
 repo_dir="$SINGLESERVER_REPO_DIR"
 repo="$SINGLESERVER_REPO"
@@ -143,15 +150,14 @@ git fetch --depth=1 origin "$sha"
 git reset --hard "$sha"
 git clean -fdx
 git remote set-url origin "https://github.com/${repo}.git"
+ignore_checkout_path "/.docker/"
 
 git_done_ms=$(now_ms)
 
 if git ls-files --error-unmatch config/deploy.yml >/dev/null 2>&1; then
   deploy_config_source=repo
 else
-  if ! grep -qxF "/config/deploy.yml" .git/info/exclude; then
-    printf '\n/config/deploy.yml\n' >> .git/info/exclude
-  fi
+  ignore_checkout_path "/config/deploy.yml"
   rm -f config/deploy.yml
   mkdir -p config
   generated_deploy_file=config/deploy.yml
@@ -161,9 +167,7 @@ fi
 echo "deploy_config=${deploy_config_source}"
 
 mkdir -p .kamal
-if ! grep -qxF "/.kamal/secrets" .git/info/exclude; then
-  printf '\n/.kamal/secrets\n' >> .git/info/exclude
-fi
+ignore_checkout_path "/.kamal/secrets"
 if [ -f "$env_file" ]; then
   install -m 600 "$env_file" .kamal/secrets
 else
