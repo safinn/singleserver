@@ -341,6 +341,9 @@ func appendAppToConfigYAML(body []byte, entry addAppEntry) ([]byte, error) {
 	if err := yaml.Unmarshal(buf.Bytes(), &config); err != nil {
 		return nil, err
 	}
+	if err := config.Normalize(); err != nil {
+		return nil, err
+	}
 	return buf.Bytes(), nil
 }
 

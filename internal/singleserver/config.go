@@ -139,18 +139,32 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(body, &config); err != nil {
 		return nil, err
 	}
-	seen := map[string]bool{}
-	for i := range config.Apps {
-		if err := config.Apps[i].Normalize(); err != nil {
-			return nil, err
-		}
-		key := strings.ToLower(config.Apps[i].Repo)
-		if seen[key] {
-			return nil, fmt.Errorf("duplicate repo in config: %s", config.Apps[i].Repo)
-		}
-		seen[key] = true
+	if err := config.Normalize(); err != nil {
+		return nil, err
 	}
 	return &config, nil
+}
+
+func (c *Config) Normalize() error {
+	seenRepos := map[string]bool{}
+	seenNames := map[string]string{}
+	for i := range c.Apps {
+		if err := c.Apps[i].Normalize(); err != nil {
+			return err
+		}
+		repoKey := strings.ToLower(c.Apps[i].Repo)
+		if seenRepos[repoKey] {
+			return fmt.Errorf("duplicate repo in config: %s", c.Apps[i].Repo)
+		}
+		seenRepos[repoKey] = true
+
+		nameKey := strings.ToLower(c.Apps[i].Name)
+		if existingRepo := seenNames[nameKey]; existingRepo != "" {
+			return fmt.Errorf("duplicate app name in config: %s is used by %s and %s", c.Apps[i].Name, existingRepo, c.Apps[i].Repo)
+		}
+		seenNames[nameKey] = c.Apps[i].Repo
+	}
+	return nil
 }
 
 func (c *Config) AppByRepo(repo string) (*AppConfig, bool) {

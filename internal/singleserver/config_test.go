@@ -3,6 +3,7 @@ package singleserver
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -77,6 +78,26 @@ func TestAppByRepoIsCaseInsensitive(t *testing.T) {
 	}
 	if app.Name != "fullsend" {
 		t.Fatalf("unexpected app: %s", app.Name)
+	}
+}
+
+func TestLoadConfigRejectsDuplicateAppNames(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "apps.yml")
+	body := []byte(`apps:
+  - alice/homepage
+  - bob/homepage
+`)
+	if err := os.WriteFile(path, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected duplicate app name error")
+	}
+	if !strings.Contains(err.Error(), "duplicate app name in config") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -158,6 +159,19 @@ func TestAppendAppToConfigYAMLUsesScalarForRepoOnly(t *testing.T) {
 	}
 	if string(updated) != "apps:\n  - dvassallo/sillyface-games\n" {
 		t.Fatalf("unexpected yaml:\n%s", updated)
+	}
+}
+
+func TestAppendAppToConfigYAMLRejectsDuplicateAppName(t *testing.T) {
+	body := []byte(`apps:
+  - alice/homepage
+`)
+	_, err := appendAppToConfigYAML(body, addAppEntry{repo: "bob/homepage"})
+	if err == nil {
+		t.Fatal("expected duplicate app name error")
+	}
+	if !strings.Contains(err.Error(), "duplicate app name in config") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

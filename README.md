@@ -50,6 +50,11 @@ branch:    repository default branch from the webhook payload
 kamal:     generated from conventions unless config/deploy.yml is tracked
 ```
 
+App names must be unique on the server because they drive checkout paths, Kamal
+service names, containers, storage paths, and inferred domains. If two GitHub
+owners have a repo with the same name, add one of them with `--name` or set a
+different `name` in `apps.yml`.
+
 Use an object only when an app needs overrides:
 
 ```yaml
