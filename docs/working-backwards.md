@@ -410,19 +410,19 @@ Status key:
 | Central `apps.yml` allowlist | Built | Pushes for unlisted repos are ignored. |
 | GitHub App push deploys | Built | The GitHub App provides webhooks and installation tokens. |
 | Generated Kamal config | Built | Repos do not need `config/deploy.yml` unless they want custom behavior. |
-| `singleserver add` | Partial | Adds apps, validates GitHub access, checks `Dockerfile`, supports explicit hosts and optional deploy. Target behavior is deploy-by-default with a `--no-deploy` escape hatch. Default host inference and DNS automation are not built. |
-| `singleserver doctor` | Partial | Checks daemon, config, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. Needs disk, Docker, proxy, and DNS checks. |
-| Installer script | Needed | Should install Docker, Kamal, Single Server, systemd service, and base config. |
-| `singleserver init` | Needed | Should configure host environment, Cloudflare Tunnel, and GitHub App connection. No user-facing host domain required. |
-| `singleserver github connect` | Needed | Repair command. Today the setup page exists; normal `init` should wrap the flow. |
-| DNS provider integration | Needed | Cloudflare DNS should be first-class because Cloudflare Tunnel is required. |
-| Ingress setup | Needed | Current production uses host-level cloudflared. The installer should make this reproducible. |
-| App domain management | Needed | Add/remove hosts after app creation. |
-| App environment variables | Needed | Central server-side env/secrets management. |
-| Persistent storage | Needed | First-class storage mounts and SQLite backup/restore. |
-| Runtime logs | Needed | Deploy logs exist; app container logs need a CLI path. |
-| App removal | Needed | Remove config, proxy routes, containers, and optionally DNS/storage. |
-| Upgrade command | Needed | Pull releases, restart service, and run `doctor`. |
+| `singleserver add` | Built | Adds apps, validates GitHub access, checks `Dockerfile`, deploys by default, supports `--no-deploy`, infers default domains from Cloudflare, and configures DNS/tunnel routing. |
+| `singleserver doctor` | Built | Checks daemon, config, Docker, disk, Cloudflare Tunnel, DNS, stale routes, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. |
+| Installer script | Built | Installs Docker, Kamal, cloudflared, Single Server, systemd service, local registry, base config, and runs `init`. Public distribution still needs the final `singleserver.com/install.sh` hosting/release path. |
+| `singleserver init` | Built | Creates base host state, connects Cloudflare when a token is present, restarts the daemon, and prints the GitHub App setup URL. |
+| `singleserver github connect` | Built | Repair command that prints the GitHub App setup URL and can set a custom GitHub App display name. |
+| DNS provider integration | Built | Cloudflare DNS and Cloudflare Tunnel are first-class for webhook and app routes. |
+| Ingress setup | Built | The installer and `cloudflare connect` set up host-level cloudflared and keep tunnel config aligned with `apps.yml`. |
+| App domain management | Built | Add/remove/list/verify hosts after app creation; add/remove deploy by default and support `--no-deploy`. |
+| App environment variables | Built | Central server-side env/secrets management exists through `singleserver env`. |
+| Persistent storage | Partial | Storage mounts plus tar backup/restore exist. SQLite-specific backup safety and restore confirmation/restart UX still need hardening. |
+| Runtime logs | Built | `singleserver logs <app> --runtime` streams app container logs. |
+| App removal | Built | Removes config, proxy routes, containers, and optionally storage. |
+| Upgrade command | Built | Re-runs the installer, restarts the service, and runs `doctor`. |
 | Provider-specific server provisioning | Needed | Optional later step: create Hetzner/DO/AWS/Azure instances directly from Single Server. |
 
 ## Product Principles

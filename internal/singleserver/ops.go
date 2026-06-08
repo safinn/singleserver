@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -223,21 +224,15 @@ func cliRemove(args []string, w io.Writer) error {
 	return nil
 }
 
-func cliDomains(args []string, w io.Writer) error {
+func cliDomains(args []string, w io.Writer, logger *log.Logger) error {
 	if len(args) == 0 {
 		return errors.New("usage: singleserver domains <add|remove|list|verify> ...")
 	}
 	switch args[0] {
 	case "add":
-		if len(args) != 3 {
-			return errors.New("usage: singleserver domains add <app> <domain>")
-		}
-		return updateDomain(args[1], args[2], true, w)
+		return cliDomainChange(args[1:], true, w, logger)
 	case "remove":
-		if len(args) != 3 {
-			return errors.New("usage: singleserver domains remove <app> <domain>")
-		}
-		return updateDomain(args[1], args[2], false, w)
+		return cliDomainChange(args[1:], false, w, logger)
 	case "list":
 		if len(args) > 2 {
 			return errors.New("usage: singleserver domains list [app]")
@@ -253,10 +248,40 @@ func cliDomains(args []string, w io.Writer) error {
 	}
 }
 
-func updateDomain(appName string, host string, add bool, w io.Writer) error {
+func cliDomainChange(args []string, add bool, w io.Writer, logger *log.Logger) error {
+	command := "add"
+	if !add {
+		command = "remove"
+	}
+	fs := flag.NewFlagSet("domains "+command, flag.ContinueOnError)
+	fs.SetOutput(w)
+	noDeploy := fs.Bool("no-deploy", false, "update config and routing without deploying")
+	if err := fs.Parse(normalizeFlagArgs(args, noFlagValues)); err != nil {
+		return err
+	}
+	if fs.NArg() != 2 {
+		return fmt.Errorf("usage: singleserver domains %s <app> <domain> [--no-deploy]", command)
+	}
+
+	app, err := updateDomain(fs.Arg(0), fs.Arg(1), add, w)
+	if err != nil {
+		return err
+	}
+	if *noDeploy {
+		fmt.Fprintf(w, "%s\tnext\tdeploy with `singleserver deploy %s`\n", app.Name, app.Repo)
+		return nil
+	}
+	fmt.Fprintf(w, "%s\tdeploy\tstart\tapplying domain change\n", app.Name)
+	if err := cliDeploy([]string{app.Repo}, logger); err != nil {
+		return err
+	}
+	return cliDoctor([]string{app.Name}, w)
+}
+
+func updateDomain(appName string, host string, add bool, w io.Writer) (*AppConfig, error) {
 	host = strings.TrimSpace(host)
 	if host == "" || strings.Contains(host, "://") || strings.Contains(host, "/") {
-		return fmt.Errorf("invalid domain: %q", host)
+		return nil, fmt.Errorf("invalid domain: %q", host)
 	}
 	if err := updateConfiguredApp(appName, func(app *AppConfig) error {
 		if add {
@@ -268,14 +293,29 @@ func updateDomain(appName string, host string, add bool, w io.Writer) error {
 			}
 			fmt.Fprintf(w, "%s\tdomain\tok\tadded %s\n", app.Name, host)
 		} else {
+			removedHealthcheck := "https://" + host + app.HealthcheckPath
 			app.Hosts = removeFold(app.Hosts, host)
+			if strings.EqualFold(app.Healthcheck, removedHealthcheck) {
+				if len(app.Hosts) > 0 {
+					app.Healthcheck = "https://" + app.Hosts[0] + app.HealthcheckPath
+				} else {
+					app.Healthcheck = ""
+				}
+			}
 			fmt.Fprintf(w, "%s\tdomain\tok\tremoved %s\n", app.Name, host)
 		}
 		return nil
 	}); err != nil {
-		return err
+		return nil, err
 	}
-	return syncCloudflareAppDomain(host, add, w)
+	app, err := configuredApp(appName)
+	if err != nil {
+		return nil, err
+	}
+	if err := syncCloudflareAppDomain(host, add, w); err != nil {
+		return nil, err
+	}
+	return app, nil
 }
 
 func listDomains(args []string, w io.Writer) error {

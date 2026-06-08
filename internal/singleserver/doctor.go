@@ -230,27 +230,47 @@ func doctorApps(apps []AppConfig, args []string) ([]AppConfig, error) {
 
 func doctorDaemon(w io.Writer) bool {
 	port := envDefault("SINGLESERVER_PORT", "8787")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	deadline := time.Now().Add(5 * time.Second)
+	var lastErr error
+	var lastStatus string
+	for {
+		status, err := daemonHealthStatus(port)
+		if err == nil {
+			fmt.Fprintf(w, "daemon\tok\t%s\n", status)
+			return true
+		}
+		lastErr = err
+		lastStatus = status
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if lastStatus != "" {
+		fmt.Fprintf(w, "daemon\tfailed\t%s\n", lastStatus)
+	} else {
+		fmt.Fprintf(w, "daemon\tfailed\t%s\n", lastErr)
+	}
+	return false
+}
+
+func daemonHealthStatus(port string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:"+port+"/health", nil)
 	if err != nil {
-		fmt.Fprintf(w, "daemon\tfailed\t%s\n", err)
-		return false
+		return "", err
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Fprintf(w, "daemon\tfailed\t%s\n", err)
-		return false
+		return "", err
 	}
 	defer res.Body.Close()
-
 	if res.StatusCode < 200 || res.StatusCode >= 400 {
-		fmt.Fprintf(w, "daemon\tfailed\t%s\n", res.Status)
-		return false
+		return res.Status, errors.New(res.Status)
 	}
-	fmt.Fprintf(w, "daemon\tok\t%s\n", res.Status)
-	return true
+	return res.Status, nil
 }
 
 func doctorGitHubInstallation(w io.Writer, github *GitHubClient, app AppConfig) bool {

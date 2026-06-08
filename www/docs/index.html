@@ -675,15 +675,16 @@
                 <div class="command-heading">
                     <span class="command-name">Manage domains</span>
                     <code class="command-usage">singleserver domains &lt;subcommand&gt; ...</code>
-                    <p class="command-description">Adds, removes, lists, and verifies app domains. Domain changes update central config, Cloudflare DNS, and tunnel routing.</p>
+                    <p class="command-description">Adds, removes, lists, and verifies app domains. Domain changes update central config, Cloudflare DNS, tunnel routing, and redeploy the app so Kamal picks up the new proxy config.</p>
                 </div>
                 <div class="command-details">
                     <p class="option-heading">Subcommands for <code>singleserver domains</code></p>
                     <ul class="option-list">
-                        <li><code>add &lt;app&gt; &lt;domain&gt;</code><span>Add the hostname to the app, create or update the Cloudflare CNAME, add the tunnel route, and set a default external healthcheck if one is missing.</span></li>
-                        <li><code>remove &lt;app&gt; &lt;domain&gt;</code><span>Remove the hostname from the app and remove the matching Cloudflare DNS/tunnel route.</span></li>
+                        <li><code>add &lt;app&gt; &lt;domain&gt;</code><span>Add the hostname to the app, create or update the Cloudflare CNAME, add the tunnel route, set a default external healthcheck if one is missing, and redeploy the app.</span></li>
+                        <li><code>remove &lt;app&gt; &lt;domain&gt;</code><span>Remove the hostname from the app, remove the matching Cloudflare DNS/tunnel route, clear a matching default healthcheck, and redeploy the app.</span></li>
                         <li><code>list [app]</code><span>Print all configured domains, optionally scoped to one app.</span></li>
                         <li><code>verify [app]</code><span>Check whether configured domains resolve, optionally scoped to one app.</span></li>
+                        <li><code>--no-deploy</code><span>Use with <code>add</code> or <code>remove</code> to update config and Cloudflare routing without redeploying immediately.</span></li>
                     </ul>
                 </div>
             </div>

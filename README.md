@@ -141,6 +141,7 @@ singleserver add https://github.com/owner/repo
 singleserver deploy dvassallo/fullsend
 singleserver render-deploy smallbets/userbase-homepage
 singleserver logs fullsend
+singleserver domains add fullsend play.example.com
 ```
 
 `singleserver add <github-url>` validates GitHub App access, checks the repo's
@@ -154,6 +155,11 @@ and no host is provided, the default app domain is `<app>.<zone>`. Pass
 
 `singleserver render-deploy <owner/repo>` prints the generated Kamal `deploy.yml`
 for a configured app. It does not inspect or modify the app repository.
+
+`singleserver domains add <app> <domain>` and `singleserver domains remove <app>
+<domain>` update `apps.yml`, Cloudflare DNS, Cloudflare Tunnel routing, and then
+deploy the app so Kamal picks up the changed proxy hosts. Pass `--no-deploy` to
+stage the domain change without applying it to the running app immediately.
 
 ## Adding An App
 

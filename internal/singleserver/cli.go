@@ -51,7 +51,7 @@ func RunCLI(args []string, logger *log.Logger) error {
 	case "remove":
 		return cliRemove(args[1:], os.Stdout)
 	case "domains":
-		return cliDomains(args[1:], os.Stdout)
+		return cliDomains(args[1:], os.Stdout, logger)
 	case "env":
 		return cliEnv(args[1:], os.Stdout)
 	case "storage":
