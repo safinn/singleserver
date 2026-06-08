@@ -22,6 +22,54 @@ func TestDisplayAppDefaults(t *testing.T) {
 	}
 }
 
+func TestListShowsFirstAppHintWhenEmpty(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	if err := os.WriteFile(configPath, []byte("apps: []\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := cliList(&out); err != nil {
+		t.Fatal(err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "apps\t0") {
+		t.Fatalf("expected app count, got:\n%s", got)
+	}
+	if !strings.Contains(got, "singleserver add https://github.com/owner/repo") {
+		t.Fatalf("expected add hint, got:\n%s", got)
+	}
+}
+
+func TestStatusShowsConfigAndFirstAppHintWhenEmpty(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	t.Setenv("SINGLESERVER_PORT", "0")
+	if err := os.WriteFile(configPath, []byte("apps: []\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := cliStatus(&out); err != nil {
+		t.Fatal(err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "config\tok\t"+configPath+"\tapps=0") {
+		t.Fatalf("expected config summary, got:\n%s", got)
+	}
+	if !strings.Contains(got, "apps\t0") {
+		t.Fatalf("expected app count, got:\n%s", got)
+	}
+	if !strings.Contains(got, "singleserver add https://github.com/owner/repo") {
+		t.Fatalf("expected add hint, got:\n%s", got)
+	}
+}
+
 func TestDisplayAppOverrides(t *testing.T) {
 	app := AppConfig{
 		Repo:        "dvassallo/fullsend",

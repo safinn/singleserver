@@ -111,9 +111,14 @@ Commands:
 }
 
 func cliList(w io.Writer) error {
-	config, err := LoadConfig(envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml"))
+	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
+	config, err := LoadConfig(configPath)
 	if err != nil {
 		return err
+	}
+	if len(config.Apps) == 0 {
+		printNoApps(w)
+		return nil
 	}
 	containers, containerErr := runningAppContainers()
 	journal, _ := recentSingleServerJournal()
@@ -133,9 +138,15 @@ func cliStatus(w io.Writer) error {
 		fmt.Fprintf(w, "daemon\t%s\n", res.Status)
 	}
 
-	config, err := LoadConfig(envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml"))
+	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
+	config, err := LoadConfig(configPath)
 	if err != nil {
 		return err
+	}
+	fmt.Fprintf(w, "config\tok\t%s\tapps=%d\n", configPath, len(config.Apps))
+	if len(config.Apps) == 0 {
+		printNoApps(w)
+		return nil
 	}
 	containers, containerErr := runningAppContainers()
 	journal, _ := recentSingleServerJournal()
@@ -159,6 +170,10 @@ func cliStatus(w io.Writer) error {
 		fmt.Fprintf(w, "%s\thealthcheck=%s%s\n", prefix, status, detail)
 	}
 	return nil
+}
+
+func printNoApps(w io.Writer) {
+	fmt.Fprintln(w, "apps\t0\tadd your first app with `singleserver add https://github.com/owner/repo`")
 }
 
 func appSummaryStatus(app AppConfig, containers map[string]string, containerErr error, journal string) string {
