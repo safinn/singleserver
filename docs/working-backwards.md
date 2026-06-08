@@ -15,8 +15,8 @@ three commands and one GitHub browser approval:
 ```sh
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
-singleserver init --domain deploy.example.com
-singleserver add me/my-app --host my-app.example.com --deploy
+singleserver init --domain example.com
+singleserver add me/my-app --deploy
 ```
 
 After that, every push to the configured branch deploys automatically.
@@ -42,6 +42,8 @@ Single Server has four moving parts:
   if the GitHub App is installed broadly.
 - **App containers:** every project runs in its own Docker container behind the
   host proxy.
+- **Cloudflare zone:** the domain configured during `init`. By default,
+  `me/my-app` becomes `my-app.example.com`; `--host` is only for custom names.
 
 Single Server should feel like a tiny PaaS you own, not like a pile of bespoke
 shell scripts.
@@ -93,17 +95,17 @@ The command should be safe to rerun.
 Ideal command:
 
 ```sh
-singleserver init --domain deploy.example.com
+singleserver init --domain example.com
 ```
 
-This should configure the public webhook/control URL and Cloudflare Tunnel
-ingress. Single Server assumes Cloudflare Tunnel for public traffic and does not
-manage direct public TLS.
+This should configure the public webhook/control URL, default app domain, and
+Cloudflare Tunnel ingress. Single Server assumes Cloudflare Tunnel for public
+traffic and does not manage direct public TLS.
 
 Recommended default:
 
 ```sh
-singleserver init --domain deploy.example.com
+singleserver init --domain example.com
 ```
 
 ### 4. Connect GitHub
@@ -144,7 +146,7 @@ singleserver doctor
 Ideal command:
 
 ```sh
-singleserver add me/my-app --host my-app.example.com --deploy
+singleserver add me/my-app --deploy
 ```
 
 This should:
@@ -153,7 +155,8 @@ This should:
 - Detect the default branch
 - Check that the repo contains a `Dockerfile`
 - Add the app to `/etc/singleserver/apps.yml`
-- Configure DNS for `my-app.example.com`, if a DNS provider is connected
+- Infer the default public host `my-app.example.com`
+- Configure Cloudflare DNS and tunnel routing for `my-app.example.com`
 - Render and validate the generated Kamal config
 - Deploy the current branch tip
 - Run the app healthcheck
@@ -167,6 +170,7 @@ my-app github_installation ok id=123456
 my-app default_branch ok main
 my-app dockerfile ok Dockerfile on main
 my-app dns ok my-app.example.com
+my-app host ok my-app.example.com
 my-app deploy_config ok generated from conventions
 my-app config ok added to /etc/singleserver/apps.yml
 my-app deploy ok 4280ms
@@ -176,7 +180,7 @@ my-app healthcheck ok https://my-app.example.com/up
 ### Add Without Deploying
 
 ```sh
-singleserver add me/my-app --host my-app.example.com
+singleserver add me/my-app
 ```
 
 This should configure the app but wait for the next push or manual deploy.
@@ -185,11 +189,11 @@ This should configure the app but wait for the next push or manual deploy.
 
 ```sh
 singleserver add me/my-app \
-  --host my-app.example.com \
+  --host app.example.com \
   --branch production \
   --app-port 3000 \
   --healthcheck-path /health \
-  --healthcheck https://my-app.example.com/health \
+  --healthcheck https://app.example.com/health \
   --deploy
 ```
 
@@ -235,7 +239,7 @@ CMD ["bun", "start"]
 Then add it with:
 
 ```sh
-singleserver add me/my-node-app --host app.example.com --app-port 3000 --deploy
+singleserver add me/my-node-app --app-port 3000 --deploy
 ```
 
 ## Managing Apps
@@ -367,9 +371,9 @@ This is the complete happy path we should optimize for:
 ```sh
 ssh root@203.0.113.10
 curl -fsSL https://singleserver.com/install.sh | sh
-singleserver init --domain deploy.example.com
+singleserver init --domain example.com
 singleserver github connect
-singleserver add me/homepage --host example.com --host www.example.com --deploy
+singleserver add me/homepage --deploy
 ```
 
 Then:
@@ -393,7 +397,7 @@ Status key:
 | Central `apps.yml` allowlist | Built | Pushes for unlisted repos are ignored. |
 | GitHub App push deploys | Built | The GitHub App provides webhooks and installation tokens. |
 | Generated Kamal config | Built | Repos do not need `config/deploy.yml` unless they want custom behavior. |
-| `singleserver add` | Partial | Adds apps, validates GitHub access, checks `Dockerfile`, supports hosts and optional deploy. DNS automation is not built. |
+| `singleserver add` | Partial | Adds apps, validates GitHub access, checks `Dockerfile`, supports explicit hosts and optional deploy. Default host inference and DNS automation are not built. |
 | `singleserver doctor` | Partial | Checks daemon, config, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. Needs disk, Docker, proxy, and DNS checks. |
 | Installer script | Needed | Should install Docker, Kamal, Single Server, systemd service, and base config. |
 | `singleserver init` | Needed | Should configure Cloudflare Tunnel ingress, public URL, and host environment. |
