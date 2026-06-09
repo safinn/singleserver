@@ -55,6 +55,11 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 	if proxy["forward_headers"] != true {
 		t.Fatalf("unexpected forward_headers: %v", proxy["forward_headers"])
 	}
+	run := proxy["run"].(map[string]any)
+	bindIPs := run["bind_ips"].([]any)
+	if len(bindIPs) != 1 || bindIPs[0] != "127.0.0.1" {
+		t.Fatalf("unexpected proxy bind IPs: %#v", bindIPs)
+	}
 
 	hosts := proxy["hosts"].([]any)
 	if len(hosts) != 2 || hosts[0] != "userbase.com" || hosts[1] != "www.userbase.com" {

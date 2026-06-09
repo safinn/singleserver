@@ -55,6 +55,11 @@ type kamalProxy struct {
 	SSL            bool                  `yaml:"ssl"`
 	ForwardHeaders bool                  `yaml:"forward_headers"`
 	Healthcheck    kamalProxyHealthcheck `yaml:"healthcheck"`
+	Run            kamalProxyRun         `yaml:"run"`
+}
+
+type kamalProxyRun struct {
+	BindIPs []string `yaml:"bind_ips"`
 }
 
 type kamalProxyHealthcheck struct {
@@ -108,6 +113,9 @@ func GeneratedDeployYAML(app AppConfig) ([]byte, error) {
 				Path:     app.HealthcheckPath,
 				Interval: 1,
 				Timeout:  1,
+			},
+			Run: kamalProxyRun{
+				BindIPs: []string{"127.0.0.1"},
 			},
 		},
 		DeployTimeout: 10,
