@@ -631,7 +631,7 @@ func cloudflareDomainOps(state *CloudflareState, client *CloudflareClient) (clou
 		}, nil
 	}
 	if state.TunnelID == "" || state.ConfigFile == "" {
-		return cloudflareDomainSyncOps{}, errors.New("Cloudflare DNS is connected but no server IP is configured; run `singleserver cloudflare connect --server-ip <ip>`")
+		return cloudflareDomainSyncOps{}, errors.New("Cloudflare is connected but no tunnel route target is configured; run `singleserver cloudflare connect`")
 	}
 	target := state.TunnelID + ".cfargotunnel.com"
 	return cloudflareDomainSyncOps{

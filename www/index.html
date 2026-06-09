@@ -296,7 +296,7 @@
 
     <section>
         <h2><a href="#commands">Use it</a></h2>
-        <p>Every command runs on your server. Init connects Tailscale and GitHub, and Cloudflare DNS manages app domains when you add them.</p>
+        <p>Every command runs on your server. Init connects Tailscale, Cloudflare Tunnel, and GitHub; app domains route through Cloudflare by default.</p>
 
         <div class="commands-list" id="commands">
             <div class="command-item">
@@ -383,7 +383,7 @@
             </div>
             <div class="feature">
                 <strong>App domains</strong>
-                <p>Domains are inferred or added when you add apps. Cloudflare DNS points them at your server, and Kamal handles routing and TLS.</p>
+                <p>Domains are inferred or added when you add apps. Cloudflare Tunnel hides your server IP, handles public TLS, and keeps CDN and proxy features on by default.</p>
             </div>
             <div class="feature">
                 <strong>Tiny Go tool</strong>

@@ -29,7 +29,7 @@ if ! command -v tailscale >/dev/null 2>&1; then
 fi
 systemctl enable --now tailscaled || true
 
-if [ "${SINGLESERVER_INSTALL_CLOUDFLARED:-0}" = "1" ] && ! command -v cloudflared >/dev/null 2>&1; then
+if [ "${SINGLESERVER_SKIP_CLOUDFLARED:-0}" != "1" ] && ! command -v cloudflared >/dev/null 2>&1; then
   tmp_deb="/tmp/cloudflared-linux-${cloudflared_arch}.deb"
   curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cloudflared_arch}.deb" -o "$tmp_deb"
   dpkg -i "$tmp_deb" || apt-get install -f -y

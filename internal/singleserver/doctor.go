@@ -196,7 +196,7 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 	failed := false
 	if state.ZoneID == "" {
 		if appsHaveHosts(selectedApps) {
-			fmt.Fprintln(w, "cloudflare\tskipped\tconnect Cloudflare with `singleserver cloudflare connect` to verify managed DNS")
+			fmt.Fprintln(w, "cloudflare\tskipped\tconnect Cloudflare with `singleserver cloudflare connect` to verify DNS and tunnel routes")
 		} else {
 			fmt.Fprintln(w, "cloudflare\tskipped\tno DNS provider configured")
 		}
@@ -209,8 +209,8 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 	}
 
 	routes := map[string]string{}
-	legacyTunnel := state.ServerIP == "" && state.TunnelID != ""
-	if legacyTunnel {
+	tunnelMode := state.ServerIP == "" && state.TunnelID != ""
+	if tunnelMode {
 		for label, path := range map[string]string{
 			"credentials": state.CredentialsFile,
 			"config":      state.ConfigFile,
@@ -250,7 +250,7 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 		failed = true
 	}
 
-	if legacyTunnel && state.HookHost != "" {
+	if tunnelMode && state.HookHost != "" {
 		if !doctorHostResolves(w, "cloudflare", "hook_dns", state.HookHost) {
 			failed = true
 		}
@@ -265,7 +265,7 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 		}
 	}
 
-	if legacyTunnel {
+	if tunnelMode {
 		expectedHosts := expectedCloudflaredHosts(state.HookHost, allApps)
 		for _, host := range staleCloudflaredHosts(routes, expectedHosts) {
 			fmt.Fprintf(w, "cloudflare\tstale_route\tfailed\t%s -> %s not in apps.yml\n", host, routes[host])
@@ -281,7 +281,7 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 			if cloudflareClient != nil && !doctorCloudflareDNSRecord(w, app.Name, "cloudflare_dns", host, state, cloudflareClient) {
 				failed = true
 			}
-			if !legacyTunnel {
+			if !tunnelMode {
 				continue
 			}
 			if service := routes[strings.ToLower(host)]; service == "" {

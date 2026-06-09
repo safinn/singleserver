@@ -37,11 +37,11 @@ Kamal config, or per-repo runner setup.
 
 Single Server has a few moving parts:
 
-- **Server:** one VPS running Docker, Kamal, Tailscale, and the Single Server
-  daemon. This is where every `singleserver` command runs.
-- **Tailscale:** the private admin network and the public webhook surface.
-  Operators can reach the host with Tailscale SSH, and GitHub can reach the
-  daemon through Tailscale Funnel at the server's `*.ts.net` URL.
+- **Server:** one VPS running Docker, Kamal, Tailscale, cloudflared, and the
+  Single Server daemon. This is where every `singleserver` command runs.
+- **Tailscale:** the private admin network. Operators can reach the host with
+  Tailscale SSH without managing workstation SSH keys. Tailscale Funnel can also
+  provide a fallback setup/webhook URL when Cloudflare is not connected yet.
 - **GitHub App:** the event source and deploy credential provider, connected by
   `singleserver init`. Push webhooks trigger deploys; installation tokens fetch
   code and set commit statuses.
@@ -49,10 +49,12 @@ Single Server has a few moving parts:
   if the GitHub App is installed broadly.
 - **App containers:** every project runs in its own Docker container behind the
   host proxy.
-- **App domains:** domains belong to apps, not to the host. Cloudflare DNS
-  points app hostnames at the server's public IP; Kamal's proxy handles host
-  routing and TLS on the server. A hostname can belong to only one app at a
-  time.
+- **App domains:** domains belong to apps, not to the host. By default,
+  Cloudflare creates proxied CNAME records to a Cloudflare Tunnel, cloudflared
+  carries requests to the server, and Kamal routes traffic to the right
+  container behind that tunnel. The server IP stays hidden, Cloudflare handles
+  public TLS and edge protections, and a hostname can belong to only one app at
+  a time.
 - **App names:** the repo name is the default app name, but app names must be
   unique on a server because they drive generated service names, containers,
   storage paths, and inferred domains.
@@ -93,6 +95,7 @@ The installer should:
 - Install Docker
 - Install Kamal
 - Install Tailscale
+- Install cloudflared
 - Install `/usr/local/bin/singleserver`
 - Install and start `singleserver.service`
 - Create `/etc/singleserver`
@@ -110,14 +113,16 @@ Ideal command:
 singleserver init
 ```
 
-This should configure the host environment, Tailscale, Cloudflare DNS, and the
-GitHub App connection. Tailscale handles private server access and the GitHub webhook
-surface. Cloudflare handles app DNS when a Cloudflare token is available.
+This should configure the host environment, Tailscale, Cloudflare Tunnel, and
+the GitHub App connection. Tailscale handles private server access. Cloudflare
+handles public setup/webhook traffic and app domains when a Cloudflare token is
+available.
 
 The host itself should not need a user-facing domain. If the implementation
-needs a stable webhook or control URL, `init` should use the server's Tailscale
-Funnel URL and hide that detail from normal app management. App domains should
-be selected or inferred when apps are added.
+needs a stable webhook or control URL, `init` should use a small Cloudflare
+hostname such as `hooks.example.com` when Cloudflare is connected, or fall back
+to the server's Tailscale Funnel URL. App domains should be selected or inferred
+when apps are added.
 
 `init` should end by running:
 
@@ -162,14 +167,14 @@ After the browser approval, the CLI should write:
 All follow-up commands continue to run on the server over SSH.
 
 `singleserver tailscale connect` should install or repair the server's
-Tailscale connection, enable Tailscale SSH when possible, expose the local
-daemon through Funnel, and store the resulting `*.ts.net` URL for GitHub App
-callbacks and webhooks.
+Tailscale connection, enable Tailscale SSH when possible, and optionally expose
+the local daemon through Funnel as a fallback setup/webhook URL.
 
 `singleserver cloudflare connect --zone <domain>` should connect app-domain DNS
-automation for one Cloudflare zone. It should store the zone and the server's
-public IP so future app domains can be created as DNS records pointing at this
-server.
+automation for one Cloudflare zone. It should create or reuse a Cloudflare
+Tunnel, configure `cloudflared`, store a `hooks.<zone>` setup/webhook hostname,
+and create proxied CNAME records to the tunnel for future app domains. Direct
+A-record mode should exist only as an explicit advanced option.
 
 ## Adding Apps
 
@@ -189,7 +194,8 @@ This should:
 - Add the app to `/etc/singleserver/apps.yml`
 - Ask for or infer the app domain, such as `my-app.example.com`. The inferred
   domain should use a DNS-safe label derived from the app name.
-- Configure Cloudflare DNS for `my-app.example.com`
+- Configure a proxied Cloudflare DNS record and tunnel route for
+  `my-app.example.com`
 - Render and validate the generated Kamal config
 - Deploy the current branch tip
 - Run the app healthcheck
@@ -317,8 +323,8 @@ This should verify:
 - Docker health
 - Proxy/ingress health
 - Resolver DNS
-- Cloudflare DNS targets
-- Tailscale and Funnel status
+- Cloudflare Tunnel routes and DNS targets
+- Tailscale status
 
 ### Deploy Manually
 
@@ -352,7 +358,8 @@ singleserver domains add my-app my-app.example.com
 singleserver domains remove my-app old.example.com
 ```
 
-Changing domains should update central config, DNS when possible, and the proxy.
+Changing domains should update central config, Cloudflare DNS and tunnel routes
+when possible, and the proxy.
 
 ### Manage Environment Variables
 
@@ -387,9 +394,10 @@ singleserver remove my-app --delete-storage --yes
 singleserver remove my-app --delete-repo --yes
 ```
 
-This should stop the container, remove proxy routes, optionally remove DNS, and
-remove the app from `apps.yml`. The repository checkout and persistent storage
-should be kept by default and deleted only with explicit confirmation.
+This should stop the container, remove proxy routes, remove Cloudflare DNS and
+tunnel routes when managed, and remove the app from `apps.yml`. The repository
+checkout and persistent storage should be kept by default and deleted only with
+explicit confirmation.
 
 ### Upgrade Single Server
 
@@ -449,14 +457,14 @@ Status key:
 | Central `apps.yml` allowlist | Built | Pushes for unlisted repos are ignored. |
 | GitHub App push deploys | Built | The GitHub App provides webhooks and installation tokens. |
 | Generated Kamal config | Built | Repos do not need `config/deploy.yml` unless they want custom behavior. |
-| `singleserver add` | Built | Adds apps, validates GitHub access, checks `Dockerfile`, deploys by default, supports `--no-deploy`, infers default domains from Cloudflare, and configures DNS records. |
-| `singleserver doctor` | Built | Checks daemon, config, Docker, local deploy user/SSH, local registry, disk, Tailscale/Funnel, Cloudflare DNS targets, resolver DNS, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. |
-| Installer script | Built | `https://singleserver.com/install.sh` installs Docker, Kamal, Tailscale, the hosted Single Server binary, the systemd service, local registry, base config, and runs `init`. Source builds remain available as an explicit fallback. |
-| `singleserver init` | Built | Creates base host state, connects Tailscale/Funnel, connects Cloudflare DNS when a token is present, restarts the daemon, prints the GitHub App setup URL once a public Tailscale URL exists, runs `doctor`, and reports setup as pending until Tailscale auth and browser approval are completed. |
+| `singleserver add` | Built | Adds apps, validates GitHub access, checks `Dockerfile`, deploys by default, supports `--no-deploy`, infers default domains from Cloudflare, and configures DNS records and tunnel routes. |
+| `singleserver doctor` | Built | Checks daemon, config, Docker, local deploy user/SSH, local registry, disk, Tailscale, Cloudflare Tunnel routes, Cloudflare DNS targets, resolver DNS, GitHub App access, checkouts, deploy config, last deploy, and healthchecks. |
+| Installer script | Built | `https://singleserver.com/install.sh` installs Docker, Kamal, Tailscale, cloudflared, the hosted Single Server binary, the systemd service, local registry, base config, and runs `init`. Source builds remain available as an explicit fallback. |
+| `singleserver init` | Built | Creates base host state, connects Tailscale, connects Cloudflare Tunnel and DNS when a token is present, restarts the daemon, prints the GitHub App setup URL once a public URL exists, runs `doctor`, and reports setup as pending until required browser approvals are completed. |
 | `singleserver github connect` | Built | Repair command that prints the GitHub App setup URL, can set a custom GitHub App display name, and can create a public/installable app for multi-owner repo setups. |
-| `singleserver tailscale connect` | Built | Repair command that connects Tailscale SSH and exposes the daemon through Tailscale Funnel for GitHub setup and webhooks. |
+| `singleserver tailscale connect` | Built | Repair command that connects Tailscale SSH and can expose the daemon through Tailscale Funnel as a fallback setup/webhook URL. |
 | DNS provider integration | Built | Cloudflare DNS is first-class for app domains. |
-| Ingress setup | Built | App domains point to the server public IP; Kamal's proxy handles host routing and TLS for containers. |
+| Ingress setup | Built | App domains route through proxied Cloudflare Tunnel records by default; Kamal's proxy handles host routing to containers behind the tunnel. |
 | App domain management | Built | Add/remove/list/verify hosts after app creation; add/remove deploy by default and support `--no-deploy`. |
 | App environment variables | Built | Central server-side env/secrets management exists through `singleserver env`. |
 | Persistent storage | Built | Storage mounts, SQLite-aware backups, explicit restore confirmation, rollback copy retention, and container restart behavior are built. Off-server backup destinations can be added later. |

@@ -19,7 +19,7 @@ func cliInit(args []string, w io.Writer) error {
 	fs.SetOutput(w)
 	zoneName := fs.String("cloudflare-zone", defaultCloudflareZone(), "Cloudflare zone to connect when a Cloudflare token is available")
 	zoneAlias := fs.String("zone", "", "deprecated alias for --cloudflare-zone")
-	skipCloudflare := fs.Bool("skip-cloudflare", false, "skip Cloudflare DNS setup")
+	skipCloudflare := fs.Bool("skip-cloudflare", false, "skip Cloudflare Tunnel setup")
 	skipTailscale := fs.Bool("skip-tailscale", false, "skip Tailscale setup")
 	if err := fs.Parse(normalizeFlagArgs(args, initFlagTakesValue)); err != nil {
 		return err
@@ -149,19 +149,25 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	fs.SetOutput(w)
 	zoneName := fs.String("zone", defaultCloudflareZone(), "Cloudflare zone name")
 	serverIP := fs.String("server-ip", strings.TrimSpace(os.Getenv("SINGLESERVER_PUBLIC_IP")), "public server IPv4 address")
-	proxied := fs.Bool("proxied", false, "proxy app DNS records through Cloudflare")
-	tunnelName := fs.String("tunnel", "", "legacy Cloudflare tunnel name")
+	direct := fs.Bool("direct", false, "use direct A records instead of a Cloudflare Tunnel")
+	proxied := fs.Bool("proxied", true, "proxy direct app DNS records through Cloudflare")
+	dnsOnly := fs.Bool("dns-only", false, "create DNS-only direct app records")
+	tunnelName := fs.String("tunnel", "", "Cloudflare tunnel name")
 	hookHost := fs.String("hook-host", "", "webhook hostname")
 	if err := fs.Parse(normalizeFlagArgs(args, cloudflareFlagTakesValue)); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--server-ip 203.0.113.10] [--proxied]")
+		return errors.New("usage: singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com] [--direct --server-ip 203.0.113.10] [--dns-only]")
 	}
 	tunnelNameSet := false
+	serverIPSet := false
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "tunnel" {
+		switch f.Name {
+		case "tunnel":
 			tunnelNameSet = true
+		case "server-ip":
+			serverIPSet = true
 		}
 	})
 
@@ -183,8 +189,8 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	state.AccountID = zone.Account.ID
 	state.ZoneID = zone.ID
 	state.ZoneName = zone.Name
-	state.Proxied = *proxied
-	if !tunnelNameSet && strings.TrimSpace(*hookHost) == "" {
+	state.Proxied = *proxied && !*dnsOnly
+	if *direct || serverIPSet || *dnsOnly {
 		if strings.TrimSpace(*serverIP) == "" {
 			detectedIP, err := detectPublicIPv4()
 			if err != nil {
@@ -210,6 +216,7 @@ func cliCloudflareConnect(args []string, w io.Writer) error {
 	}
 
 	state.ServerIP = ""
+	state.Proxied = true
 	applyCloudflareTunnelName(state, *tunnelName, tunnelNameSet)
 	if strings.TrimSpace(*hookHost) != "" {
 		state.HookHost = strings.TrimSpace(*hookHost)

@@ -90,7 +90,7 @@ Usage:
   singleserver init [--skip-tailscale] [--skip-cloudflare]
   singleserver tailscale connect [--auth-key <key>] [--hostname <name>] [--no-funnel]
   singleserver github connect [--name "Single Server"] [--public]
-  singleserver cloudflare connect [--zone example.com] [--server-ip 203.0.113.10] [--proxied]
+  singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]
   singleserver list
   singleserver status
   singleserver add <github-url> [options]
@@ -111,7 +111,7 @@ Commands:
   init           Create base server state, connect providers when configured, and print GitHub setup URL.
   tailscale      Connect Tailscale SSH and expose the GitHub webhook through Funnel.
   github         Repair or print the GitHub App setup URL.
-  cloudflare     Connect Cloudflare DNS for app domains.
+  cloudflare     Connect Cloudflare Tunnel and DNS for public app ingress.
   list           Show configured apps.
   status         Check the local daemon and configured healthchecks.
   add            Add a GitHub repository to apps.yml.
