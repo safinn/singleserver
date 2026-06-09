@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"html"
+	"io"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -40,9 +41,11 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	t.Setenv("SINGLESERVER_CONFIG", filepath.Join(dir, "apps.yml"))
 	originalOutput := commandOutputFunc
 	originalRun := commandRunFunc
+	originalRunToWriter := commandRunToWriterFunc
 	t.Cleanup(func() {
 		commandOutputFunc = originalOutput
 		commandRunFunc = originalRun
+		commandRunToWriterFunc = originalRunToWriter
 	})
 	commandOutputFunc = func(timeout time.Duration, name string, args ...string) (string, error) {
 		if name != "tailscale" {
@@ -61,6 +64,11 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	runCommands := []string{}
 	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
 		runCommands = append(runCommands, name+" "+strings.Join(args, " "))
+		return nil
+	}
+	writerCommands := []string{}
+	commandRunToWriterFunc = func(w io.Writer, timeout time.Duration, name string, args ...string) error {
+		writerCommands = append(writerCommands, name+" "+strings.Join(args, " "))
 		return nil
 	}
 
@@ -85,11 +93,14 @@ func TestTailscaleConnectStoresHostname(t *testing.T) {
 	if !strings.Contains(string(envBody), "SINGLESERVER_PUBLIC_URL='https://assetstacks.example.ts.net'") {
 		t.Fatalf("public URL not stored in env:\n%s", envBody)
 	}
-	if !strings.Contains(strings.Join(runCommands, "\n"), "tailscale funnel --bg --yes 8787") {
-		t.Fatalf("expected funnel command: %#v", runCommands)
+	if !strings.Contains(strings.Join(writerCommands, "\n"), "tailscale funnel --bg --yes 8787") {
+		t.Fatalf("expected funnel command: %#v", writerCommands)
 	}
 	if !strings.Contains(out.String(), "tailscale\tssh\tok") {
 		t.Fatalf("ssh output missing:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "tailscale\tfunnel\tstarting\t127.0.0.1:8787") {
+		t.Fatalf("funnel starting output missing:\n%s", out.String())
 	}
 	if !strings.Contains(out.String(), "tailscale\tfunnel\tok\thttps://assetstacks.example.ts.net -> 127.0.0.1:8787") {
 		t.Fatalf("funnel output missing:\n%s", out.String())

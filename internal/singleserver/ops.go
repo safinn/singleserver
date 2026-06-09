@@ -716,6 +716,8 @@ func runCommandToWriter(w io.Writer, timeout time.Duration, name string, args ..
 	return err
 }
 
+var commandRunToWriterFunc = runCommandToWriter
+
 func containsFold(values []string, needle string) bool {
 	for _, value := range values {
 		if strings.EqualFold(value, needle) {

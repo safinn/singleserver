@@ -169,13 +169,21 @@ has_public_url() {
   grep -Eq "^SINGLESERVER_PUBLIC_URL=.*https://.*\\.ts\\.net" /etc/singleserver/singleserver.env 2>/dev/null
 }
 
-if /usr/local/bin/singleserver tailscale connect; then
-  :
-else
-  echo "tailscale pending: run singleserver tailscale connect"
-fi
+tailscale_running() {
+  tailscale status --json 2>/dev/null | grep -q '"BackendState"[[:space:]]*:[[:space:]]*"Running"'
+}
 
-if ! has_public_url && prompt_yes "Connect Tailscale now? This opens a Tailscale login URL. [Y/n]" "Y"; then
+has_tailscale_authkey() {
+  [ -n "${TAILSCALE_AUTHKEY:-}" ] || [ -n "${TS_AUTHKEY:-}" ]
+}
+
+if has_public_url || tailscale_running || has_tailscale_authkey; then
+  if /usr/local/bin/singleserver tailscale connect; then
+    :
+  else
+    echo "tailscale pending: run singleserver tailscale connect"
+  fi
+elif prompt_yes "Connect Tailscale now? This opens a Tailscale login URL. [Y/n]" "Y"; then
   if tailscale up --ssh < /dev/tty; then
     if /usr/local/bin/singleserver tailscale connect; then
       :
@@ -185,6 +193,8 @@ if ! has_public_url && prompt_yes "Connect Tailscale now? This opens a Tailscale
   else
     echo "tailscale pending: run tailscale up --ssh, then run singleserver tailscale connect"
   fi
+else
+  echo "tailscale pending: run tailscale up --ssh, then run singleserver tailscale connect"
 fi
 
 if ! has_public_url; then

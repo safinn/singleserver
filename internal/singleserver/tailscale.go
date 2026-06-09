@@ -79,7 +79,8 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 	}
 
 	port := envDefault("SINGLESERVER_PORT", "8787")
-	if err := commandRunFunc(30*time.Second, "tailscale", "funnel", "--bg", "--yes", port); err != nil {
+	fmt.Fprintf(w, "tailscale\tfunnel\tstarting\t127.0.0.1:%s\n", port)
+	if err := commandRunToWriterFunc(w, 45*time.Second, "tailscale", "funnel", "--bg", "--yes", port); err != nil {
 		fmt.Fprintf(w, "tailscale\tfunnel\tpending\t%s\n", err)
 		return writeTailscaleStateFromStatus(status, "")
 	}
