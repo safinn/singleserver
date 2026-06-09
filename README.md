@@ -6,8 +6,7 @@ It receives GitHub App `push` webhooks through Tailscale Funnel, checks a centra
 Cloudflare Tunnel is the public ingress for app domains, with Tailscale used for private server access and the GitHub setup/webhook endpoint.
 All `singleserver` commands are run on that host over SSH.
 
-For the intended user experience and roadmap, see
-[Working Backwards: The Single Server User Experience](docs/working-backwards.md).
+For the product docs, see [www/docs/index.html](www/docs/index.html).
 For the marketing homepage, see [www/index.html](www/index.html).
 
 ## Naming
