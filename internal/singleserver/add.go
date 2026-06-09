@@ -273,6 +273,10 @@ type addPrompter struct {
 	w      io.Writer
 }
 
+type flushWriter interface {
+	Flush() error
+}
+
 func promptAddOptions(opts addOptions, input io.Reader, w io.Writer, ctx addPromptContext) (addOptions, error) {
 	p := addPrompter{reader: bufio.NewReader(input), w: w}
 	fmt.Fprintf(w, "Interactive setup for %s on %s.\n", opts.repo, ctx.targetBranch)
@@ -484,6 +488,11 @@ func (p addPrompter) ask(label, defaultValue string) (string, error) {
 		fmt.Fprintf(p.w, "%s [%s]: ", label, defaultValue)
 	} else {
 		fmt.Fprintf(p.w, "%s: ", label)
+	}
+	if flusher, ok := p.w.(flushWriter); ok {
+		if err := flusher.Flush(); err != nil {
+			return "", err
+		}
 	}
 	line, err := p.reader.ReadString('\n')
 	if err != nil && len(line) == 0 {

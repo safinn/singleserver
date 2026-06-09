@@ -134,6 +134,31 @@ func TestPromptAddOptionsUsesDockerfileDefaults(t *testing.T) {
 	}
 }
 
+func TestPromptAddOptionsFlushesBeforeReading(t *testing.T) {
+	opts := addOptions{repo: "smallbets/app"}
+	out := &flushCountingWriter{}
+	_, err := promptAddOptions(opts, strings.NewReader("\n\n\n\n"), out, addPromptContext{
+		hasDockerfile: true,
+		targetBranch:  "main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.flushes < 4 {
+		t.Fatalf("expected each interactive prompt to flush before reading, got %d flushes\n%s", out.flushes, out.String())
+	}
+}
+
+type flushCountingWriter struct {
+	bytes.Buffer
+	flushes int
+}
+
+func (w *flushCountingWriter) Flush() error {
+	w.flushes++
+	return nil
+}
+
 func TestPromptAddOptionsGeneratedNodeStaticBuild(t *testing.T) {
 	input := strings.Join([]string{
 		"node",
