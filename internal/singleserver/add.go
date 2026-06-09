@@ -20,33 +20,15 @@ type addOptions struct {
 	repo               string
 	name               string
 	branch             string
-	repoDir            string
-	hosts              repeatedStrings
 	healthcheck        string
 	healthcheckPath    string
 	appPort            int
-	dryRun             bool
 	noDeploy           bool
 	healthcheckPathSet bool
 	appPortSet         bool
 }
 
 const addUsage = "usage: singleserver add <github-url> [options]"
-
-type repeatedStrings []string
-
-func (s *repeatedStrings) String() string {
-	return strings.Join(*s, ",")
-}
-
-func (s *repeatedStrings) Set(value string) error {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return errors.New("value cannot be empty")
-	}
-	*s = append(*s, value)
-	return nil
-}
 
 type addAppEntry struct {
 	repo            string
@@ -135,11 +117,6 @@ func cliAdd(args []string, w io.Writer, logger *log.Logger) error {
 	fmt.Fprintf(w, "%s\tdockerfile\tok\tDockerfile on %s\n", app.Name, targetBranch)
 	fmt.Fprintf(w, "%s\tdeploy_config\tok\tgenerated from conventions\n", app.Name)
 
-	if opts.dryRun {
-		fmt.Fprintf(w, "%s\tconfig\tdry_run\twould add to %s\n", app.Name, configPath)
-		return nil
-	}
-
 	syncedHosts := []string{}
 	for _, host := range app.Hosts {
 		if err := syncCloudflareAppDomainFunc(host, true, w); err != nil {
@@ -177,11 +154,8 @@ func parseAddArgs(args []string, w io.Writer) (addOptions, error) {
 	fs.SetOutput(w)
 	fs.StringVar(&opts.name, "name", "", "app name override")
 	fs.StringVar(&opts.branch, "branch", "", "branch override")
-	fs.StringVar(&opts.repoDir, "path", "", "checkout path override")
-	fs.Var(&opts.hosts, "host", "public host for generated Kamal proxy; can be repeated")
 	fs.StringVar(&opts.healthcheck, "healthcheck", "", "external healthcheck URL")
 	fs.StringVar(&opts.healthcheckPath, "healthcheck-path", "", "container healthcheck path for generated Kamal config")
-	fs.BoolVar(&opts.dryRun, "dry-run", false, "validate without writing apps.yml")
 	fs.BoolVar(&opts.noDeploy, "no-deploy", false, "configure without deploying immediately")
 
 	appPort := fs.Int("app-port", 0, "container app port for generated Kamal config")
@@ -243,8 +217,6 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 		Repo:            o.repo,
 		Name:            o.name,
 		Branch:          o.branch,
-		RepoDir:         o.repoDir,
-		Hosts:           []string(o.hosts),
 		Healthcheck:     o.healthcheck,
 		HealthcheckPath: o.healthcheckPath,
 	}
@@ -271,9 +243,6 @@ func (o addOptions) app() (AppConfig, addAppEntry, error) {
 	}
 	if strings.TrimSpace(o.branch) != "" {
 		entry.branch = app.Branch
-	}
-	if strings.TrimSpace(o.repoDir) != "" {
-		entry.repoDir = app.RepoDir
 	}
 	if o.healthcheckPathSet {
 		entry.healthcheckPath = app.HealthcheckPath
@@ -472,7 +441,7 @@ func addFlagTakesValue(arg string) bool {
 		name = before
 	}
 	switch name {
-	case "name", "branch", "path", "host", "healthcheck", "healthcheck-path", "app-port":
+	case "name", "branch", "healthcheck", "healthcheck-path", "app-port":
 		return true
 	default:
 		return false

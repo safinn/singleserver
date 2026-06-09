@@ -13,8 +13,6 @@ import (
 func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 	opts, err := parseAddArgs([]string{
 		"smallbets/userbase-homepage",
-		"--host", "userbase.com",
-		"--host=www.userbase.com",
 		"--no-deploy",
 		"--app-port", "8080",
 	}, io.Discard)
@@ -23,9 +21,6 @@ func TestParseAddArgsAllowsFlagsAfterRepo(t *testing.T) {
 	}
 	if opts.repo != "smallbets/userbase-homepage" {
 		t.Fatalf("unexpected repo: %s", opts.repo)
-	}
-	if len(opts.hosts) != 2 || opts.hosts[0] != "userbase.com" || opts.hosts[1] != "www.userbase.com" {
-		t.Fatalf("unexpected hosts: %#v", opts.hosts)
 	}
 	if !opts.noDeploy {
 		t.Fatal("expected no-deploy")
@@ -73,31 +68,10 @@ func TestParseAddArgsRejectsNonGitHubURL(t *testing.T) {
 	}
 }
 
-func TestAddOptionsAppInfersHealthcheckFromFirstHost(t *testing.T) {
-	opts := addOptions{
-		repo:            "smallbets/userbase-homepage",
-		hosts:           repeatedStrings{"userbase.com", "www.userbase.com"},
-		healthcheckPath: "ready",
-	}
-	app, entry, err := opts.app()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if app.Healthcheck != "https://userbase.com/ready" {
-		t.Fatalf("unexpected healthcheck: %s", app.Healthcheck)
-	}
-	if entry.healthcheck != "https://userbase.com/ready" {
-		t.Fatalf("unexpected entry healthcheck: %s", entry.healthcheck)
-	}
-	if entry.healthcheckPath != "" {
-		t.Fatalf("did not expect healthcheck_path to be written: %s", entry.healthcheckPath)
-	}
-}
-
 func TestApplyDefaultAppDomainUsesCloudflareZone(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
-	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"zone_name":"nobrainer.host","zone_id":"zone","server_ip":"203.0.113.10"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"zone_name":"nobrainer.host","zone_id":"zone","tunnel_id":"tunnel","config_file":"/etc/cloudflared/singleserver.yml"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 

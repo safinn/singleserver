@@ -304,7 +304,7 @@ func TestDomainsVerifyChecksCloudflareDNSRecord(t *testing.T) {
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","zone_id":"zone","server_ip":"203.0.113.10"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","zone_id":"zone","tunnel_id":"tunnel"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -314,14 +314,14 @@ func TestDomainsVerifyChecksCloudflareDNSRecord(t *testing.T) {
 		if host != "localhost" {
 			t.Fatalf("unexpected host: %s", host)
 		}
-		return state.ServerIP, nil
+		return state.TunnelID + ".cfargotunnel.com", nil
 	}
 
 	var out bytes.Buffer
 	if err := cliDomains([]string{"verify", "fullsend"}, &out, log.New(io.Discard, "", 0)); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tok\tlocalhost -> 203.0.113.10") {
+	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tok\tlocalhost -> tunnel.cfargotunnel.com") {
 		t.Fatalf("expected Cloudflare DNS ok output, got:\n%s", out.String())
 	}
 }
@@ -338,14 +338,14 @@ func TestDomainsVerifyFailsWhenCloudflareDNSRecordDoesNotMatch(t *testing.T) {
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","zone_id":"zone","server_ip":"203.0.113.10"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "cloudflare.json"), []byte(`{"api_token":"token","zone_id":"zone","tunnel_id":"tunnel"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	originalVerify := verifyCloudflareDNSRecordFunc
 	t.Cleanup(func() { verifyCloudflareDNSRecordFunc = originalVerify })
 	verifyCloudflareDNSRecordFunc = func(host string, state *CloudflareState, client *CloudflareClient) (string, error) {
-		return state.ServerIP, errors.New("missing A record")
+		return state.TunnelID + ".cfargotunnel.com", errors.New("missing CNAME")
 	}
 
 	var out bytes.Buffer
@@ -353,7 +353,7 @@ func TestDomainsVerifyFailsWhenCloudflareDNSRecordDoesNotMatch(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected Cloudflare DNS verification error")
 	}
-	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tfailed\tlocalhost\tmissing A record") {
+	if !strings.Contains(out.String(), "fullsend\tcloudflare_dns\tfailed\tlocalhost\tmissing CNAME") {
 		t.Fatalf("expected Cloudflare DNS failed output, got:\n%s", out.String())
 	}
 }

@@ -38,7 +38,7 @@ func RunCLI(args []string, logger *log.Logger) error {
 		if len(args) >= 2 && args[1] == "connect" {
 			return cliGitHubConnect(args[2:], os.Stdout)
 		}
-		return errors.New("usage: singleserver github connect [--name \"Single Server\"] [--public]")
+		return errors.New("usage: singleserver github connect")
 	case "tailscale":
 		if len(args) >= 2 && args[1] == "connect" {
 			return cliTailscaleConnect(args[2:], os.Stdout)
@@ -87,9 +87,9 @@ func printUsage(w io.Writer) {
 
 Usage:
   singleserver version
-  singleserver init [--skip-tailscale] [--skip-cloudflare]
-  singleserver tailscale connect [--auth-key <key>] [--hostname <name>] [--no-funnel]
-  singleserver github connect [--name "Single Server"] [--public]
+  singleserver init
+  singleserver tailscale connect [--auth-key <key>] [--hostname <name>]
+  singleserver github connect
   singleserver cloudflare connect [--zone example.com] [--tunnel singleserver] [--hook-host hooks.example.com]
   singleserver list
   singleserver status
@@ -109,7 +109,7 @@ Usage:
 Commands:
   version        Print the installed Single Server version.
   init           Create base server state, connect providers when configured, and print GitHub setup URL.
-  tailscale      Connect Tailscale SSH and expose the GitHub webhook through Funnel.
+  tailscale      Connect Tailscale SSH for private server access.
   github         Repair or print the GitHub App setup URL.
   cloudflare     Connect Cloudflare Tunnel and DNS for public app ingress.
   list           Show configured apps.

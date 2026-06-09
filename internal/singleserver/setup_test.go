@@ -12,48 +12,29 @@ import (
 	"time"
 )
 
-func TestGitHubConnectStoresCustomAppName(t *testing.T) {
+func TestGitHubConnectPrintsSetupURL(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	t.Setenv("SINGLESERVER_CONFIG", filepath.Join(dir, "apps.yml"))
 	stubCommandRun(t)
 
 	var out bytes.Buffer
-	if err := cliGitHubConnect([]string{"--name", "Single Server Test"}, &out); err != nil {
+	if err := cliGitHubConnect(nil, &out); err != nil {
 		t.Fatal(err)
 	}
 	body, err := os.ReadFile(filepath.Join(dir, "singleserver.env"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), "SINGLESERVER_GITHUB_APP_NAME='Single Server Test'") {
-		t.Fatalf("custom app name not stored:\n%s", body)
+	if strings.Contains(string(body), "SINGLESERVER_GITHUB_APP_") {
+		t.Fatalf("unexpected GitHub App override stored:\n%s", body)
 	}
 	if !strings.Contains(out.String(), "/setup/github-app?token=") {
 		t.Fatalf("setup URL not printed: %s", out.String())
 	}
 }
 
-func TestGitHubConnectStoresPublicAppFlag(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("SINGLESERVER_STATE_DIR", dir)
-	t.Setenv("SINGLESERVER_CONFIG", filepath.Join(dir, "apps.yml"))
-	stubCommandRun(t)
-
-	var out bytes.Buffer
-	if err := cliGitHubConnect([]string{"--public"}, &out); err != nil {
-		t.Fatal(err)
-	}
-	body, err := os.ReadFile(filepath.Join(dir, "singleserver.env"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(body), "SINGLESERVER_GITHUB_APP_PUBLIC='true'") {
-		t.Fatalf("public app flag not stored:\n%s", body)
-	}
-}
-
-func TestTailscaleConnectStoresFunnelPublicURL(t *testing.T) {
+func TestTailscaleConnectStoresHostname(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("SINGLESERVER_STATE_DIR", dir)
 	t.Setenv("SINGLESERVER_CONFIG", filepath.Join(dir, "apps.yml"))
@@ -77,7 +58,9 @@ func TestTailscaleConnectStoresFunnelPublicURL(t *testing.T) {
 		}
 		return "", nil
 	}
+	runCommands := []string{}
 	commandRunFunc = func(timeout time.Duration, name string, args ...string) error {
+		runCommands = append(runCommands, name+" "+strings.Join(args, " "))
 		return nil
 	}
 
@@ -85,20 +68,22 @@ func TestTailscaleConnectStoresFunnelPublicURL(t *testing.T) {
 	if err := cliTailscaleConnect(nil, &out); err != nil {
 		t.Fatal(err)
 	}
-	body, err := os.ReadFile(filepath.Join(dir, "singleserver.env"))
+	body, err := os.ReadFile(filepath.Join(dir, "tailscale.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), "SINGLESERVER_PUBLIC_URL='https://assetstacks.example.ts.net'") {
-		t.Fatalf("public URL not stored:\n%s", body)
+	if !strings.Contains(string(body), `"hostname": "assetstacks.example.ts.net"`) {
+		t.Fatalf("hostname not stored:\n%s", body)
 	}
-	if !strings.Contains(out.String(), "tailscale\tfunnel\tok\thttps://assetstacks.example.ts.net -> 127.0.0.1:8787") {
-		t.Fatalf("funnel output missing:\n%s", out.String())
+	if strings.Contains(strings.Join(runCommands, "\n"), "funnel") {
+		t.Fatalf("unexpected funnel command: %#v", runCommands)
+	}
+	if !strings.Contains(out.String(), "tailscale\tssh\tok") {
+		t.Fatalf("ssh output missing:\n%s", out.String())
 	}
 }
 
-func TestSetupGitHubAppManifestCanBePublic(t *testing.T) {
-	t.Setenv("SINGLESERVER_GITHUB_APP_PUBLIC", "true")
+func TestSetupGitHubAppManifestIsPublic(t *testing.T) {
 	server := &Server{
 		publicURL:  "https://hooks.example.com",
 		setupToken: "setup-token",

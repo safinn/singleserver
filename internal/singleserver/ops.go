@@ -501,26 +501,6 @@ func verifyDomains(args []string, w io.Writer) error {
 var verifyCloudflareDNSRecordFunc = verifyCloudflareDNSRecord
 
 func verifyCloudflareDNSRecord(host string, state *CloudflareState, client *CloudflareClient) (string, error) {
-	if strings.TrimSpace(state.ServerIP) != "" {
-		target := strings.TrimSpace(state.ServerIP)
-		records, err := client.dnsRecords(state.ZoneID, host, "A")
-		if err != nil {
-			return target, err
-		}
-		for _, record := range records {
-			if strings.TrimSpace(record.Content) == target {
-				return target, nil
-			}
-		}
-		if len(records) == 0 {
-			return target, fmt.Errorf("missing A record to %s", target)
-		}
-		contents := make([]string, 0, len(records))
-		for _, record := range records {
-			contents = append(contents, record.Content)
-		}
-		return target, fmt.Errorf("A record points to %s, expected %s", strings.Join(contents, ","), target)
-	}
 	if strings.TrimSpace(state.TunnelID) == "" {
 		return "", errors.New("no Cloudflare DNS target configured; run `singleserver cloudflare connect`")
 	}
@@ -545,8 +525,7 @@ func verifyCloudflareDNSRecord(host string, state *CloudflareState, client *Clou
 }
 
 func cliUpgrade(w io.Writer) error {
-	installURL := envDefault("SINGLESERVER_INSTALL_URL", "https://singleserver.com/install.sh")
-	if err := commandRunFunc(10*time.Minute, "bash", "-lc", "curl -fsSL "+shellQuote(installURL)+" | sh"); err != nil {
+	if err := commandRunFunc(10*time.Minute, "bash", "-lc", "curl -fsSL https://singleserver.com/install.sh | sh"); err != nil {
 		return err
 	}
 	if err := commandRunFunc(15*time.Second, "systemctl", "restart", "singleserver.service"); err != nil {

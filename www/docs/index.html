@@ -539,8 +539,8 @@
             <li><strong>GitHub App</strong> The GitHub App is how the server receives push events and reads code. It sends signed webhooks to your server, issues short-lived installation tokens for repository fetches, and lets the daemon write pending, success, and failure commit statuses back to GitHub. GitHub triggers the deploy, but the deploy runs on your server.</li>
             <li><strong><code>apps.yml</code></strong> This is the central app registry and deployment allowlist. Installing the GitHub App on a repository only grants access; it does not make that repository deployable. A pushed repository must also match an app entry in <code>/etc/singleserver/apps.yml</code>, and the pushed branch must match that app's configured branch.</li>
             <li><strong>App containers</strong> Every app runs in its own Docker container. Single Server prepares the checkout and generated deploy config, then Kamal builds the image, starts the replacement container, runs the healthcheck, and moves traffic only after the new container is ready. The result is container isolation without writing per-app deploy plumbing.</li>
-            <li><strong>Tailscale</strong> Tailscale provides private server access. Tailscale SSH lets operators reach the server without managing SSH keys on every workstation, and Tailscale Funnel can provide a fallback setup/webhook URL when Cloudflare is not connected yet.</li>
-            <li><strong>Cloudflare Tunnel</strong> Cloudflare is the default public edge for app domains. Single Server creates proxied CNAME records to a Cloudflare Tunnel, keeps cloudflared routes in sync, and lets Cloudflare handle public TLS, proxying, CDN features, and DDoS protection while the server IP stays hidden.</li>
+            <li><strong>Tailscale</strong> Tailscale provides private server access. Tailscale SSH lets operators reach the server without managing SSH keys on every workstation.</li>
+            <li><strong>Cloudflare Tunnel</strong> Cloudflare is the public edge for webhooks and app domains. Single Server creates proxied CNAME records to a Cloudflare Tunnel, keeps cloudflared routes in sync, and lets Cloudflare handle public TLS, proxying, CDN features, and DDoS protection while the server IP stays hidden.</li>
             <li><strong>Central state</strong> Domains, server-side environment files, storage mounts, backups, deploy logs, and provider credentials are server concerns. Repositories stay focused on application code and a Dockerfile. When an app needs an exception, the exception belongs in <code>apps.yml</code> or a server-side command, not in GitHub Actions secrets or a repo-specific runner.</li>
         </ul>
     </section>
@@ -555,22 +555,15 @@
                 <div class="command-heading">
                     <span class="command-name">Install</span>
                     <code class="command-usage">curl -fsSL https://singleserver.com/install.sh | sh</code>
-                    <p class="command-description">Installs Docker, Kamal, Tailscale, cloudflared, the hosted <code>singleserver</code> Linux binary, the <code>singleserver.service</code> daemon, and base config files. The installer is safe to rerun and can fall back to a source build when explicitly requested.</p>
+                    <p class="command-description">Installs Docker, Kamal, Tailscale, cloudflared, the hosted <code>singleserver</code> Linux binary, the <code>singleserver.service</code> daemon, and base config files. The installer is safe to rerun.</p>
                 </div>
             </div>
 
             <div class="command-entry">
                 <div class="command-heading">
                     <span class="command-name">Initialize your server</span>
-                    <code class="command-usage">singleserver init [options]</code>
+                    <code class="command-usage">singleserver init</code>
                     <p class="command-description">Runs first-time setup for the server. It creates the base directories and config files, connects or repairs Tailscale, connects Cloudflare Tunnel and DNS when a token is available, restarts the daemon, prints the GitHub App setup URL once a public URL exists, and runs diagnostics. GitHub setup is reported as pending until the required provider approvals are completed.</p>
-                </div>
-                <div class="command-details">
-                    <p class="option-heading"><code>singleserver init</code> options</p>
-                    <ul class="option-list">
-                        <li><code>--skip-tailscale</code><span>Create local Single Server files and GitHub setup state without connecting Tailscale.</span></li>
-                        <li><code>--skip-cloudflare</code><span>Create local Single Server files and GitHub setup state without connecting Cloudflare Tunnel or DNS.</span></li>
-                    </ul>
                 </div>
             </div>
 
@@ -578,14 +571,13 @@
                 <div class="command-heading">
                     <span class="command-name">Repair Tailscale connection</span>
                     <code class="command-usage">singleserver tailscale connect [options]</code>
-                    <p class="command-description">Connects or repairs Tailscale on the server, enables Tailscale SSH when possible, and can expose the daemon with Tailscale Funnel as a fallback setup/webhook URL.</p>
+                    <p class="command-description">Connects or repairs Tailscale on the server and enables Tailscale SSH when possible.</p>
                 </div>
                 <div class="command-details">
                     <p class="option-heading"><code>singleserver tailscale connect</code> options</p>
                     <ul class="option-list">
                         <li><code>--auth-key &lt;key&gt;</code><span>Use a Tailscale auth key for unattended server joins. Prefer <code>TS_AUTHKEY</code> or <code>TAILSCALE_AUTHKEY</code> in automation so the key does not land in shell history.</span></li>
                         <li><code>--hostname &lt;name&gt;</code><span>Set the Tailscale machine name during an unattended join.</span></li>
-                        <li><code>--no-funnel</code><span>Connect Tailscale for private access without exposing the webhook endpoint.</span></li>
                     </ul>
                 </div>
             </div>
@@ -593,15 +585,8 @@
             <div class="command-entry">
                 <div class="command-heading">
                     <span class="command-name">Repair GitHub connection</span>
-                    <code class="command-usage">singleserver github connect [options]</code>
+                    <code class="command-usage">singleserver github connect</code>
                     <p class="command-description">Prints the GitHub App setup URL again, creates a setup token if needed, and restarts the daemon so the browser setup page can create or reconnect the GitHub App. The GitHub App needs repository contents read, commit statuses write, and push events.</p>
-                </div>
-                <div class="command-details">
-                    <p class="option-heading"><code>singleserver github connect</code> options</p>
-                    <ul class="option-list">
-                        <li><code>--name &lt;name&gt;</code><span>Use a custom GitHub App display name, useful for test servers or branded installs.</span></li>
-                        <li><code>--public</code><span>Create a public/installable GitHub App manifest so the app can be installed under multiple GitHub owners or organizations.</span></li>
-                    </ul>
                 </div>
             </div>
 
@@ -617,10 +602,6 @@
                         <li><code>--zone &lt;domain&gt;</code><span>Cloudflare zone to manage. If omitted, Single Server uses the accessible zone when there is only one.</span></li>
                         <li><code>--tunnel &lt;name&gt;</code><span>Cloudflare Tunnel name. Defaults to <code>singleserver</code>.</span></li>
                         <li><code>--hook-host &lt;domain&gt;</code><span>Public setup and webhook hostname. Defaults to <code>hooks.&lt;zone&gt;</code>.</span></li>
-                        <li><code>--direct</code><span>Use direct A records instead of a Cloudflare Tunnel. This is an advanced fallback path.</span></li>
-                        <li><code>--server-ip &lt;ip&gt;</code><span>Public IPv4 address for direct A-record mode. Supplying it implies <code>--direct</code>.</span></li>
-                        <li><code>--dns-only</code><span>Use DNS-only direct A records instead of proxied direct A records. Supplying it implies <code>--direct</code>.</span></li>
-                        <li><code>--proxied=false</code><span>Disable the Cloudflare proxy for direct A-record mode. Tunnel mode is always proxied.</span></li>
                     </ul>
                 </div>
             </div>
@@ -649,9 +630,6 @@
                         <li><code>--healthcheck &lt;url&gt;</code><span>External URL Single Server checks after deploys and in <code>status</code>/<code>doctor</code>.</span></li>
                         <li><code>--name &lt;app&gt;</code><span>Override the app name. Defaults to the repository name lowercased.</span></li>
                         <li><code>--no-deploy</code><span>Configure the app but wait for the next push or manual deploy.</span></li>
-                        <li><code>--dry-run</code><span>Validate the app and print the changes without writing <code>apps.yml</code>.</span></li>
-                        <li><code>--path &lt;dir&gt;</code><span>Advanced checkout path override. Defaults to <code>/srv/repos/&lt;app&gt;</code>.</span></li>
-                        <li><code>--host &lt;domain&gt;</code><span>Advanced domain override. Can be repeated. Most apps use the inferred app domain or add domains later with <code>singleserver domains add</code>.</span></li>
                     </ul>
                 </div>
             </div>
@@ -750,7 +728,7 @@
                         <li><code>add &lt;app&gt; &lt;domain&gt;</code><span>Add the hostname to the app, create or update the proxied Cloudflare DNS record and tunnel route, set a default external healthcheck if one is missing, and redeploy the app.</span></li>
                         <li><code>remove &lt;app&gt; &lt;domain&gt;</code><span>Remove the hostname from the app, remove the matching Cloudflare DNS record and tunnel route, clear a matching default healthcheck, and redeploy the app.</span></li>
                         <li><code>list [app]</code><span>Print all configured domains, optionally scoped to one app.</span></li>
-                        <li><code>verify [app]</code><span>Check resolver DNS, Cloudflare DNS records, and Cloudflare Tunnel routes when available, optionally scoped to one app.</span></li>
+                        <li><code>verify [app]</code><span>Check resolver DNS and Cloudflare DNS records when available, optionally scoped to one app.</span></li>
                     </ul>
                 </div>
                 <div class="command-details">
@@ -885,19 +863,6 @@
             <li><strong><code>storage</code></strong><span><span class="setting-default">Default: absent until enabled.</span> Persistent storage mapping with optional <code>path</code> and <code>mount</code> fields.</span></li>
         </ul>
 
-        <h3><a href="#server-environment">Server Environment</a></h3>
-        <ul class="settings-list" id="server-environment">
-            <li><strong><code>SINGLESERVER_CONFIG</code></strong><span><span class="setting-default">Default: <code>/etc/singleserver/apps.yml</code>.</span> Main app config path.</span></li>
-            <li><strong><code>SINGLESERVER_STATE_DIR</code></strong><span><span class="setting-default">Default: <code>/etc/singleserver</code>.</span> Directory for GitHub App credentials, Tailscale state, Cloudflare state, setup tokens, and Single Server state.</span></li>
-            <li><strong><code>SINGLESERVER_PORT</code></strong><span><span class="setting-default">Default: <code>8787</code>.</span> Local daemon port. The daemon listens on <code>127.0.0.1</code>; Cloudflare Tunnel normally forwards webhook/setup traffic to it.</span></li>
-            <li><strong><code>SINGLESERVER_BACKUP_DIR</code></strong><span><span class="setting-default">Default: <code>/srv/backups</code>.</span> Root directory for app storage backups.</span></li>
-            <li><strong><code>SINGLESERVER_PUBLIC_URL</code></strong><span><span class="setting-default">Managed by <code>init</code>.</span> Public URL used in GitHub webhook setup, normally the Cloudflare Tunnel hook hostname such as <code>https://hooks.example.com</code>.</span></li>
-            <li><strong><code>SINGLESERVER_PUBLIC_IP</code></strong><span><span class="setting-default">Direct mode only.</span> Public IPv4 address used when <code>singleserver cloudflare connect --direct</code> creates A records instead of tunnel CNAME records.</span></li>
-            <li><strong><code>SINGLESERVER_SETUP_TOKEN</code></strong><span><span class="setting-default">Managed by <code>init</code>.</span> Token used to protect provider setup pages while GitHub and Cloudflare are being connected.</span></li>
-            <li><strong><code>SINGLESERVER_GITHUB_APP_NAME</code></strong><span><span class="setting-default">Default: <code>Single Server</code>.</span> GitHub App display name used by the setup page.</span></li>
-            <li><strong><code>SINGLESERVER_GITHUB_APP_PUBLIC</code></strong><span><span class="setting-default">Default: private app.</span> Set by <code>singleserver github connect --public</code> when the GitHub App needs to be installable under multiple owners.</span></li>
-        </ul>
-
         <h3><a href="#kamal-defaults">Generated Kamal Defaults</a></h3>
         <ul class="settings-list" id="kamal-defaults">
             <li><strong>Service and image</strong><span><span class="setting-default">Default: app name.</span> The generated Kamal service, image, and container identity are derived from the Single Server app name.</span></li>
@@ -905,7 +870,7 @@
             <li><strong>SSH</strong><span><span class="setting-default">Default: <code>deploy</code> user with <code>/root/.ssh/id_ed25519</code>.</span> The daemon runs locally, while Kamal keeps using its normal SSH-based deploy model.</span></li>
             <li><strong>Registry</strong><span><span class="setting-default">Default: <code>127.0.0.1:5555</code>.</span> Images are built and pushed to the local registry so deploys do not wait on an external registry round trip.</span></li>
             <li><strong>Builder</strong><span><span class="setting-default">Default: local Docker builder for the server architecture.</span> The server builds the image from the checked-out commit.</span></li>
-            <li><strong>Proxy</strong><span><span class="setting-default">Default: <code>ssl: false</code> behind Cloudflare Tunnel, forwarded headers on, app port <code>80</code>.</span> Kamal's proxy handles host routing to containers behind the tunnel. Direct-DNS mode uses <code>ssl: true</code> unless <code>SINGLESERVER_PROXY_SSL</code> overrides it.</span></li>
+            <li><strong>Proxy</strong><span><span class="setting-default">Default: <code>ssl: false</code> behind Cloudflare Tunnel, forwarded headers on, app port <code>80</code>.</span> Kamal's proxy handles host routing to containers behind the tunnel while Cloudflare handles public TLS at the edge.</span></li>
             <li><strong>Healthcheck</strong><span><span class="setting-default">Default: <code>/up</code>, interval <code>1</code>, timeout <code>1</code>.</span> Fast local healthchecks keep zero-downtime swaps quick for small apps.</span></li>
             <li><strong>Timeouts</strong><span><span class="setting-default">Default: deploy <code>10s</code>, drain <code>1s</code>.</span> Defaults are tuned for fast local builds and small app containers.</span></li>
         </ul>
@@ -1007,7 +972,7 @@ CMD ["bun", "start"]</pre>
             <li><strong><code>/etc/singleserver/singleserver.env</code></strong><span>Daemon environment, including local port, public webhook URL, setup token, and provider setup values.</span></li>
             <li><strong><code>/etc/singleserver/github-app.json</code></strong><span>GitHub App metadata, including app ID and webhook secret.</span></li>
             <li><strong><code>/etc/singleserver/github-app.private-key.pem</code></strong><span>GitHub App private key used to request short-lived installation tokens.</span></li>
-            <li><strong><code>/etc/singleserver/tailscale.json</code></strong><span>Tailscale hostname and Funnel URL detected by <code>singleserver tailscale connect</code>.</span></li>
+            <li><strong><code>/etc/singleserver/tailscale.json</code></strong><span>Tailscale hostname detected by <code>singleserver tailscale connect</code>.</span></li>
             <li><strong><code>/etc/singleserver/cloudflare.json</code></strong><span>Cloudflare zone, tunnel, and DNS state created by <code>singleserver cloudflare connect</code>.</span></li>
             <li><strong><code>/srv/repos/&lt;app&gt;</code></strong><span>Git checkout for each app.</span></li>
             <li><strong><code>/srv/storage/&lt;app&gt;</code></strong><span>Persistent storage for SQLite databases, uploads, and app-owned files.</span></li>

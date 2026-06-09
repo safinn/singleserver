@@ -49,7 +49,7 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 	if proxy["app_port"] != 8080 {
 		t.Fatalf("unexpected app_port: %v", proxy["app_port"])
 	}
-	if proxy["ssl"] != true {
+	if proxy["ssl"] != false {
 		t.Fatalf("unexpected ssl: %v", proxy["ssl"])
 	}
 	if proxy["forward_headers"] != true {
@@ -67,11 +67,8 @@ func TestGeneratedDeployYAMLUsesConventionsAndOverrides(t *testing.T) {
 	}
 }
 
-func TestGeneratedDeployYAMLDisablesSSLForLegacyCloudflareTunnel(t *testing.T) {
+func TestGeneratedDeployYAMLKeepsProxySSLDisabled(t *testing.T) {
 	t.Setenv("SINGLESERVER_STATE_DIR", t.TempDir())
-	if err := writeCloudflareState(&CloudflareState{TunnelID: "tunnel"}); err != nil {
-		t.Fatal(err)
-	}
 
 	body, err := GeneratedDeployYAML(AppConfig{
 		Repo:  "smallbets/userbase-homepage",

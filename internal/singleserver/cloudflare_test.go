@@ -107,11 +107,11 @@ func TestSyncCloudflareAddRollsBackRouteWhenDNSFails(t *testing.T) {
 	}
 }
 
-func TestSyncCloudflareAddDirectDNS(t *testing.T) {
-	state := &CloudflareState{ServerIP: "203.0.113.10"}
+func TestSyncCloudflareAddTunnelDomain(t *testing.T) {
+	state := &CloudflareState{TunnelID: "tunnel"}
 	calls := []string{}
 	ops := cloudflareDomainSyncOps{
-		target: "203.0.113.10",
+		target: "tunnel.cfargotunnel.com",
 		upsertRecord: func(hostname string) error {
 			calls = append(calls, "upsert:"+hostname)
 			return nil
@@ -142,7 +142,7 @@ func TestSyncCloudflareAddDirectDNS(t *testing.T) {
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %#v, want %#v", calls, want)
 	}
-	if !strings.Contains(out.String(), "cloudflare\tdomain\tok\tapp.example.com -> 203.0.113.10") {
+	if !strings.Contains(out.String(), "cloudflare\tdomain\tok\tapp.example.com -> tunnel.cfargotunnel.com") {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
 }

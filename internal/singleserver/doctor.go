@@ -201,15 +201,16 @@ func doctorCloudflare(w io.Writer, allApps []AppConfig, selectedApps []AppConfig
 			fmt.Fprintln(w, "cloudflare\tskipped\tno DNS provider configured")
 		}
 	} else {
-		mode := "dns"
-		if state.ServerIP == "" && state.TunnelID != "" {
-			mode = "tunnel"
+		if state.TunnelID == "" {
+			fmt.Fprintf(w, "cloudflare\tstate\tfailed\tzone=%s\tmissing tunnel; run `singleserver cloudflare connect`\n", valueOrDash(state.ZoneName))
+			failed = true
+		} else {
+			fmt.Fprintf(w, "cloudflare\tstate\tok\tzone=%s\tmode=tunnel\n", valueOrDash(state.ZoneName))
 		}
-		fmt.Fprintf(w, "cloudflare\tstate\tok\tzone=%s\tmode=%s\tserver_ip=%s\tproxied=%t\n", valueOrDash(state.ZoneName), mode, valueOrDash(state.ServerIP), state.Proxied)
 	}
 
 	routes := map[string]string{}
-	tunnelMode := state.ServerIP == "" && state.TunnelID != ""
+	tunnelMode := state.TunnelID != ""
 	if tunnelMode {
 		for label, path := range map[string]string{
 			"credentials": state.CredentialsFile,

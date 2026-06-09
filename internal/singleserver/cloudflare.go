@@ -32,8 +32,6 @@ type CloudflareState struct {
 	HookHost        string `json:"hook_host"`
 	CredentialsFile string `json:"credentials_file"`
 	ConfigFile      string `json:"config_file"`
-	ServerIP        string `json:"server_ip"`
-	Proxied         bool   `json:"proxied"`
 }
 
 type CloudflareClient struct {
@@ -61,7 +59,6 @@ type cloudflareDNSRecord struct {
 	Type    string `json:"type"`
 	Name    string `json:"name"`
 	Content string `json:"content"`
-	Proxied bool   `json:"proxied"`
 }
 
 type cloudflaredConfig struct {
@@ -175,7 +172,7 @@ func (c *CloudflareClient) createTunnel(accountID string, name string, secret st
 	return &out.Result, nil
 }
 
-func (c *CloudflareClient) upsertCNAME(zoneID string, hostname string, target string, proxied bool) error {
+func (c *CloudflareClient) upsertCNAME(zoneID string, hostname string, target string) error {
 	records, err := c.dnsRecords(zoneID, hostname, "CNAME")
 	if err != nil {
 		return err
@@ -188,39 +185,7 @@ func (c *CloudflareClient) upsertCNAME(zoneID string, hostname string, target st
 		"name":    hostname,
 		"content": target,
 		"ttl":     1,
-		"proxied": proxied,
-	}
-	if len(records) == 0 {
-		return c.request("POST", "/zones/"+zoneID+"/dns_records", body, nil)
-	}
-	return c.request("PUT", "/zones/"+zoneID+"/dns_records/"+records[0].ID, body, nil)
-}
-
-func (c *CloudflareClient) upsertA(zoneID string, hostname string, target string, proxied bool) error {
-	if records, err := c.dnsRecords(zoneID, hostname, "CNAME"); err != nil {
-		return err
-	} else if len(records) > 0 {
-		contents := make([]string, 0, len(records))
-		for _, record := range records {
-			contents = append(contents, record.Content)
-		}
-		return fmt.Errorf("Cloudflare DNS %s already has a CNAME to %s; remove it before assigning an A record", hostname, strings.Join(contents, ","))
-	}
-	records, err := c.dnsRecords(zoneID, hostname, "A")
-	if err != nil {
-		return err
-	}
-	for _, record := range records {
-		if strings.TrimSpace(record.Content) != target {
-			return fmt.Errorf("Cloudflare DNS %s already points to %s; remove that A record before assigning it to Single Server", hostname, record.Content)
-		}
-	}
-	body := map[string]any{
-		"type":    "A",
-		"name":    hostname,
-		"content": target,
-		"ttl":     1,
-		"proxied": proxied,
+		"proxied": true,
 	}
 	if len(records) == 0 {
 		return c.request("POST", "/zones/"+zoneID+"/dns_records", body, nil)
@@ -235,22 +200,6 @@ func (c *CloudflareClient) deleteCNAMEToTarget(zoneID string, hostname string, t
 	}
 	for _, record := range records {
 		if !dnsRecordContentMatches(record.Content, target) {
-			continue
-		}
-		if err := c.request("DELETE", "/zones/"+zoneID+"/dns_records/"+record.ID, nil, nil); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (c *CloudflareClient) deleteAToTarget(zoneID string, hostname string, target string) error {
-	records, err := c.dnsRecords(zoneID, hostname, "A")
-	if err != nil {
-		return err
-	}
-	for _, record := range records {
-		if strings.TrimSpace(record.Content) != target {
 			continue
 		}
 		if err := c.request("DELETE", "/zones/"+zoneID+"/dns_records/"+record.ID, nil, nil); err != nil {
@@ -608,28 +557,6 @@ func syncCloudflareAppDomainWithOps(hostname string, add bool, w io.Writer, stat
 }
 
 func cloudflareDomainOps(state *CloudflareState, client *CloudflareClient) (cloudflareDomainSyncOps, error) {
-	if strings.TrimSpace(state.ServerIP) != "" {
-		target := strings.TrimSpace(state.ServerIP)
-		return cloudflareDomainSyncOps{
-			target: target,
-			mode:   "a",
-			upsertRecord: func(hostname string) error {
-				return client.upsertA(state.ZoneID, hostname, target, state.Proxied)
-			},
-			deleteRecord: func(hostname string) error {
-				return client.deleteAToTarget(state.ZoneID, hostname, target)
-			},
-			ensureRoute: func(hostname string) error {
-				return nil
-			},
-			removeRoute: func(hostname string) error {
-				return nil
-			},
-			restart: func() error {
-				return nil
-			},
-		}, nil
-	}
 	if state.TunnelID == "" || state.ConfigFile == "" {
 		return cloudflareDomainSyncOps{}, errors.New("Cloudflare is connected but no tunnel route target is configured; run `singleserver cloudflare connect`")
 	}
@@ -638,7 +565,7 @@ func cloudflareDomainOps(state *CloudflareState, client *CloudflareClient) (clou
 		target: target,
 		mode:   "tunnel",
 		upsertRecord: func(hostname string) error {
-			return client.upsertCNAME(state.ZoneID, hostname, target, true)
+			return client.upsertCNAME(state.ZoneID, hostname, target)
 		},
 		deleteRecord: func(hostname string) error {
 			return client.deleteCNAMEToTarget(state.ZoneID, hostname, target)
