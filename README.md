@@ -31,9 +31,13 @@ curl -fsSL https://singleserver.com/install.sh | sh
 
 The installer downloads the hosted Linux binary and installs Docker, Kamal,
 Tailscale, and cloudflared. It also runs first-run setup: Tailscale SSH and
-Funnel setup, Cloudflare Tunnel setup for app domains when credentials are
-available, GitHub App setup URL printing when a Funnel URL exists, and
-`singleserver doctor`.
+Funnel setup, Cloudflare Tunnel setup for app domains, GitHub App setup URL
+printing when a Funnel URL exists, and `singleserver doctor`.
+
+On an interactive SSH session, the installer prompts for Tailscale login and a
+Cloudflare API token. For unattended installs, pass `TAILSCALE_AUTHKEY` or
+`TS_AUTHKEY`, `CLOUDFLARE_API_TOKEN` or `CF_API_TOKEN`, and optionally
+`SINGLESERVER_CLOUDFLARE_ZONE` or `CLOUDFLARE_ZONE`.
 
 ## Minimal config
 

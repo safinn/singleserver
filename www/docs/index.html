@@ -546,7 +546,7 @@
                 <div class="command-heading">
                     <span class="command-name">Install</span>
                     <code class="command-usage">curl -fsSL https://singleserver.com/install.sh | sh</code>
-                    <p class="command-description">Installs Docker, Kamal, Tailscale, cloudflared, the hosted <code>singleserver</code> Linux binary, the <code>singleserver.service</code> daemon, and base config files. Then it runs first-run setup: connects or repairs Tailscale SSH and Funnel, connects Cloudflare Tunnel and DNS for app domains when credentials are available, prints the GitHub App setup URL once a Funnel URL exists, and runs diagnostics. The installer is safe to rerun.</p>
+                    <p class="command-description">Installs Docker, Kamal, Tailscale, cloudflared, the hosted <code>singleserver</code> Linux binary, the <code>singleserver.service</code> daemon, and base config files. Then it runs first-run setup: connects or repairs Tailscale SSH and Funnel, connects Cloudflare Tunnel and DNS for app domains, prints the GitHub App setup URL once a Funnel URL exists, and runs diagnostics. In an interactive SSH session it prompts for Tailscale login and a Cloudflare API token; unattended installs can pass <code>TAILSCALE_AUTHKEY</code>, <code>CLOUDFLARE_API_TOKEN</code>, and optionally <code>SINGLESERVER_CLOUDFLARE_ZONE</code>. The installer is safe to rerun.</p>
                 </div>
             </div>
 

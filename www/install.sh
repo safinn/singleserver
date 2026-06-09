@@ -116,10 +116,79 @@ echo
 echo "Single Server installed."
 echo "Starting first-run setup."
 
+has_tty() {
+  [ -r /dev/tty ] && [ -w /dev/tty ]
+}
+
+prompt_yes() {
+  prompt="$1"
+  default="${2:-Y}"
+  if ! has_tty; then
+    return 1
+  fi
+  printf "%s " "$prompt" > /dev/tty
+  IFS= read -r answer < /dev/tty || answer=""
+  answer="$(printf "%s" "$answer" | tr '[:upper:]' '[:lower:]')"
+  if [ -z "$answer" ]; then
+    answer="$(printf "%s" "$default" | tr '[:upper:]' '[:lower:]')"
+  fi
+  [ "$answer" = "y" ] || [ "$answer" = "yes" ]
+}
+
+prompt_line() {
+  prompt="$1"
+  if ! has_tty; then
+    printf ""
+    return 0
+  fi
+  printf "%s" "$prompt" > /dev/tty
+  IFS= read -r value < /dev/tty || value=""
+  printf "%s" "$value"
+}
+
+prompt_secret() {
+  prompt="$1"
+  if ! has_tty; then
+    printf ""
+    return 0
+  fi
+  printf "%s" "$prompt" > /dev/tty
+  old_tty="$(stty -g < /dev/tty 2>/dev/null || true)"
+  stty -echo < /dev/tty 2>/dev/null || true
+  IFS= read -r value < /dev/tty || value=""
+  if [ -n "$old_tty" ]; then
+    stty "$old_tty" < /dev/tty 2>/dev/null || true
+  else
+    stty echo < /dev/tty 2>/dev/null || true
+  fi
+  printf "\n" > /dev/tty
+  printf "%s" "$value"
+}
+
+has_public_url() {
+  grep -Eq "^SINGLESERVER_PUBLIC_URL=.*https://.*\\.ts\\.net" /etc/singleserver/singleserver.env 2>/dev/null
+}
+
 if /usr/local/bin/singleserver tailscale connect; then
   :
 else
   echo "tailscale pending: run singleserver tailscale connect"
+fi
+
+if ! has_public_url && prompt_yes "Connect Tailscale now? This opens a Tailscale login URL. [Y/n]" "Y"; then
+  if tailscale up --ssh < /dev/tty; then
+    if /usr/local/bin/singleserver tailscale connect; then
+      :
+    else
+      echo "tailscale pending: run singleserver tailscale connect"
+    fi
+  else
+    echo "tailscale pending: run tailscale up --ssh, then run singleserver tailscale connect"
+  fi
+fi
+
+if ! has_public_url; then
+  echo "tailscale pending: run tailscale up --ssh, then run singleserver tailscale connect"
 fi
 
 if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || [ -n "${CF_API_TOKEN:-}" ] || [ -f /etc/singleserver/cloudflare.json ]; then
@@ -127,6 +196,26 @@ if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || [ -n "${CF_API_TOKEN:-}" ] || [ -f /etc
     :
   else
     echo "cloudflare pending: run singleserver cloudflare connect"
+  fi
+elif prompt_yes "Connect Cloudflare now? This needs an API token that can manage DNS and tunnels. [Y/n]" "Y"; then
+  cf_token="$(prompt_secret "Cloudflare API token: ")"
+  if [ -n "$cf_token" ]; then
+    cf_zone="$(prompt_line "Cloudflare zone/domain, like example.com (blank to auto-detect): ")"
+    if [ -n "$cf_zone" ]; then
+      if CLOUDFLARE_API_TOKEN="$cf_token" /usr/local/bin/singleserver cloudflare connect --zone "$cf_zone"; then
+        :
+      else
+        echo "cloudflare pending: run singleserver cloudflare connect --zone $cf_zone"
+      fi
+    else
+      if CLOUDFLARE_API_TOKEN="$cf_token" /usr/local/bin/singleserver cloudflare connect; then
+        :
+      else
+        echo "cloudflare pending: run singleserver cloudflare connect"
+      fi
+    fi
+  else
+    echo "cloudflare pending: set CLOUDFLARE_API_TOKEN, then run singleserver cloudflare connect"
   fi
 else
   echo "cloudflare pending: set CLOUDFLARE_API_TOKEN, then run singleserver cloudflare connect"
@@ -136,7 +225,7 @@ if [ -f /etc/singleserver/github-app.json ] && [ -f /etc/singleserver/github-app
   echo "github ok"
 elif grep -q "^SINGLESERVER_PUBLIC_URL=" /etc/singleserver/singleserver.env 2>/dev/null; then
   if /usr/local/bin/singleserver github connect; then
-    :
+    echo "github pending: open the setup URL above and install the GitHub App"
   else
     echo "github pending: run singleserver github connect"
   fi
