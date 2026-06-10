@@ -7,11 +7,9 @@
 
 <h1 align="center">single server</h1>
 
-<p align="center"><strong>Git push to production in &lt;5 seconds.</strong></p>
+<p><strong>Git push to production in &lt;5 seconds.</strong></p>
 
-<p align="center">One Linux box can run every app you've ever shipped. Single Server wires up Cloudflare, Tailscale, Docker, Kamal, and GitHub. From there, every <strong>git push</strong> goes live in under 5 seconds. No build queue, no per-app bills, no pile of YAML.</p>
-
----
+<p>One Linux box can run every app you've ever shipped. Single Server wires up Cloudflare, Tailscale, Docker, Kamal, and GitHub. From there, every <strong>git push</strong> goes live in under 5 seconds. No build queue, no per-app bills, no pile of YAML.</p>
 
 ## The entire setup
 
