@@ -15,8 +15,8 @@ RUN set -eux; \
     commit="$(git rev-parse HEAD 2>/dev/null || true)"; \
     build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
     ldflags="-X github.com/dvassallo/singleserver/internal/singleserver.Commit=${commit} -X github.com/dvassallo/singleserver/internal/singleserver.BuildDate=${build_date}"; \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$ldflags" -o /out/www/bin/singleserver-linux-amd64 ./cmd/singleserverd; \
-    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$ldflags" -o /out/www/bin/singleserver-linux-arm64 ./cmd/singleserverd
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -ldflags "$ldflags" -o /out/www/bin/singleserver-linux-amd64 ./cmd/singleserverd; \
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -buildvcs=false -ldflags "$ldflags" -o /out/www/bin/singleserver-linux-arm64 ./cmd/singleserverd
 
 FROM nginx:1.27-alpine
 
