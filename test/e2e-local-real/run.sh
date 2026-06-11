@@ -58,6 +58,8 @@ fi
 DISTROS="$(printf "%s" "${E2E_DISTROS:-ubuntu debian amazonlinux rocky}" | tr ',' ' ')"
 CASES="$(printf "%s" "${E2E_CASES:-dockerfile static static-build node}" | tr ',' ' ')"
 COMMAND_COVERAGE="${E2E_COMMAND_COVERAGE:-1}"
+CLOUDFLARE_E2E_TUNNEL_PREFIX="${SINGLESERVER_E2E_CLOUDFLARE_TUNNEL_PREFIX:-singleserver-singleserver-e2e-}"
+CLOUDFLARE_E2E_TUNNEL_CLEANUP_MIN_AGE_SECONDS="${SINGLESERVER_E2E_CLOUDFLARE_TUNNEL_CLEANUP_MIN_AGE_SECONDS:-21600}"
 WORK_ROOT="$E2E_DIR/work/$RUN_ID"
 ARTIFACT_DIR="$WORK_ROOT/artifacts"
 WWW_DIR="$ARTIFACT_DIR/www"
@@ -144,6 +146,103 @@ cf_api() {
     -H "Content-Type: application/json" \
     "https://api.cloudflare.com/client/v4$path" \
     "$@"
+}
+
+cloudflare_account_id() {
+  if [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+    printf "%s\n" "$CLOUDFLARE_ACCOUNT_ID"
+    return 0
+  fi
+
+  cf_api GET "/zones?name=$TEST_ZONE" | json_field result.0.account.id
+}
+
+sweep_stale_cloudflare_e2e_tunnels() {
+  if [ "${SINGLESERVER_E2E_SKIP_CLOUDFLARE_TUNNEL_SWEEP:-0}" = "1" ]; then
+    log "Skipping stale Cloudflare E2E tunnel sweep"
+    return 0
+  fi
+
+  local account_id page response_file candidates count total_pages tunnel_id tunnel_name tunnel_status
+  account_id="$(cloudflare_account_id)"
+  if [ -z "$account_id" ]; then
+    fail "Could not determine Cloudflare account ID for stale tunnel sweep"
+  fi
+
+  log "Sweeping stale Cloudflare E2E tunnels"
+  response_file="$(mktemp)"
+  count=0
+  page=1
+  while :; do
+    cf_api GET "/accounts/$account_id/cfd_tunnel?is_deleted=false&per_page=100&page=$page" >"$response_file"
+    candidates="$(python3 - "$response_file" "$CLOUDFLARE_E2E_TUNNEL_PREFIX" "$CLOUDFLARE_E2E_TUNNEL_CLEANUP_MIN_AGE_SECONDS" <<'PY'
+import datetime as dt
+import json
+import sys
+
+path, prefix, min_age_seconds = sys.argv[1], sys.argv[2], int(sys.argv[3])
+now = dt.datetime.now(dt.timezone.utc)
+
+with open(path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+for tunnel in data.get("result") or []:
+    tunnel_id = str(tunnel.get("id") or "")
+    name = str(tunnel.get("name") or "")
+    if not tunnel_id or not name.startswith(prefix):
+        continue
+    if tunnel.get("deleted_at"):
+        continue
+    status = str(tunnel.get("status") or "").lower()
+    if status == "healthy":
+        continue
+    if tunnel.get("connections"):
+        continue
+    created_at = tunnel.get("created_at")
+    if not created_at:
+        continue
+    try:
+        created = dt.datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+    except ValueError:
+        continue
+    if (now - created).total_seconds() < min_age_seconds:
+        continue
+    print(f"{tunnel_id}\t{name}\t{status or 'unknown'}")
+PY
+)"
+    while IFS=$'\t' read -r tunnel_id tunnel_name tunnel_status; do
+      if [ -z "$tunnel_id" ]; then
+        continue
+      fi
+      if cf_api DELETE "/accounts/$account_id/cfd_tunnel/$tunnel_id" >/dev/null; then
+        count=$((count + 1))
+        log "Deleted stale Cloudflare E2E tunnel: $tunnel_name ($tunnel_status)"
+      else
+        log "Could not delete stale Cloudflare E2E tunnel: $tunnel_name ($tunnel_status)"
+      fi
+    done <<<"$candidates"
+
+    total_pages="$(python3 - "$response_file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    data = json.load(f)
+print((data.get("result_info") or {}).get("total_pages") or 1)
+PY
+)"
+    if [ "$page" -ge "$total_pages" ]; then
+      break
+    fi
+    page=$((page + 1))
+  done
+  rm -f "$response_file"
+
+  if [ "$count" -eq 0 ]; then
+    log "No stale Cloudflare E2E tunnels found"
+  else
+    log "Deleted $count stale Cloudflare E2E tunnel(s)"
+  fi
 }
 
 cloudflare_zone_nameservers() {
@@ -1115,6 +1214,7 @@ run_distro() {
   teardown_host
 }
 
+sweep_stale_cloudflare_e2e_tunnels
 build_local_binaries
 start_artifact_server
 

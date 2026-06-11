@@ -8,6 +8,11 @@ The test is intentionally serial and stateful. It creates Cloudflare tunnels,
 Cloudflare DNS records, Git commits, and app deploys. Each distro gets one
 fresh host, then the selected app cases run sequentially on that host.
 
+The runner deletes the active Cloudflare tunnel during teardown. Before each
+run it also sweeps old, disconnected E2E tunnels whose names start with
+`singleserver-singleserver-e2e-`, so interrupted runs do not slowly accumulate
+dead tunnels in Cloudflare.
+
 Tailscale is the one deliberately reused provider state. The runner keeps a
 small Tailscale state directory per distro under `test/e2e-local-real/state/`
 so repeated local runs keep the same `.ts.net` name and cached Funnel
@@ -95,7 +100,7 @@ host images and all app cases:
 
 ```sh
 E2E_DISTROS="ubuntu debian amazonlinux rocky"
-E2E_CASES="dockerfile static node"
+E2E_CASES="dockerfile static static-build node"
 ```
 
 `E2E_DISTROS` and `E2E_CASES` also accept comma-separated values. To run one
@@ -114,11 +119,15 @@ The run verifies:
 - GitHub App webhook URL is updated to the current Funnel URL.
 - A Dockerfile app is deployed from GitHub.
 - A static app without a Dockerfile is deployed with a generated Dockerfile.
+- A built static app without a Dockerfile is deployed with a generated Node
+  build stage and a generated static runtime stage.
 - A Node app without a Dockerfile is deployed with a generated Dockerfile.
 - The Dockerfile app covers an external `/up` healthcheck.
 - The static app covers a generated Dockerfile with generated `/ready` container readiness.
 - The Node app covers generated Node containerization with `/readyz` container readiness and no external healthcheck URL.
 - Pushed GitHub commits trigger webhook deploys for every app case.
+- The command coverage scenario exercises logs, runtime logs, env vars,
+  generated config edits, domain aliases, storage, backup, and restore.
 - The app is removed and the temporary DNS record is cleaned up.
 
 For app marker checks, the runner tries the public Cloudflare edge whenever the
@@ -131,6 +140,11 @@ provider APIs.
 Supported distro images live in `test/e2e-local-real/images/`. To add another
 distro later, add `test/e2e-local-real/images/<name>.Dockerfile` and include
 `<name>` in `E2E_DISTROS`.
+
+Set `SINGLESERVER_E2E_CLOUDFLARE_TUNNEL_CLEANUP_MIN_AGE_SECONDS` to change the
+stale tunnel sweep age. The default is `21600` seconds, or 6 hours. Set
+`SINGLESERVER_E2E_SKIP_CLOUDFLARE_TUNNEL_SWEEP=1` to disable the preflight
+sweep for a run.
 
 Set `SINGLESERVER_E2E_KEEP_CONTAINER=1` to keep the disposable host after a
 failed run for debugging.
