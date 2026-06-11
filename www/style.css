@@ -67,6 +67,7 @@ pre {
 }
 
 code {
+    font-size: 0.9em;
     background: var(--highlight);
     padding: 1px 5px;
 }

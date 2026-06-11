@@ -606,22 +606,27 @@ singleserver add <span class="accent">https://github.com/you/app</span> --runtim
 
     <section id="troubleshooting">
         <h2>When something breaks</h2>
+        <p>A short triage guide, in the order that locates problems fastest.</p>
         <div class="idea-list">
             <div>
                 <strong>Start with doctor.</strong>
-                <p>Run <code>singleserver doctor</code>. It checks the whole chain end to end and tells you which link failed and why, in one screen. Most problems stop here.</p>
+                <p>Run <code>singleserver doctor</code>. It checks every layer, from the daemon, Docker, and disk to DNS, tunnel routes, GitHub access, and each app's deploy state, and prints one line per check with the reason for any failure. It is read-only and safe to run on a live server. Use it to identify which layer is failing before changing anything.</p>
             </div>
             <div>
                 <strong>A deploy failed.</strong>
-                <p>The commit on GitHub shows the failure status with the reason. On the server, <code>singleserver logs &lt;app&gt;</code> has the full build and rollout output, and <code>singleserver logs &lt;app&gt; --runtime</code> shows what your app printed if the container started and then misbehaved. Once you've fixed the cause, push again or rerun <code>singleserver deploy &lt;app&gt;</code>.</p>
+                <p>A failed deploy does not take your app down: Kamal only moves traffic after the new container passes its readiness check, so the previous version keeps serving. The commit on GitHub carries the failure status and reason. On the server, <code>singleserver logs &lt;app&gt;</code> has the full build and rollout output, and <code>singleserver logs &lt;app&gt; --runtime</code> shows your app's own output if the container started and then failed readiness. Once the cause is fixed, push again or run <code>singleserver deploy &lt;app&gt;</code>. To return to a known good release immediately, deploy its commit directly: <code>singleserver deploy &lt;app&gt; &lt;sha&gt;</code>.</p>
             </div>
             <div>
-                <strong>A connection broke.</strong>
-                <p>The connect commands are also the repair commands. <code>singleserver connect tailscale</code>, <code>singleserver connect cloudflare</code>, and <code>singleserver connect github</code> each re-establish their piece without disturbing the others, and they're safe to run on a hunch.</p>
+                <strong>An app is unhealthy.</strong>
+                <p><code>singleserver status</code> shows each app's container state, last deploy outcome, and healthcheck result. <code>singleserver logs &lt;app&gt; --runtime --follow</code> streams the container's output live. If the app needs a restart rather than a code fix, redeploying the current commit with <code>singleserver deploy &lt;app&gt;</code> replaces the container with zero downtime.</p>
             </div>
             <div>
-                <strong>You're stuck anyway.</strong>
-                <p>It's standard parts underneath: <code>docker ps</code>, <code>journalctl -u singleserver.service</code>, and the cloudflared and tailscaled services behave exactly as their own docs describe. Or open an issue on <a href="https://github.com/dvassallo/singleserver">GitHub</a>.</p>
+                <strong>GitHub, Cloudflare, or Tailscale stopped working.</strong>
+                <p>Pushes that stop deploying point at GitHub. Domains that stop serving point at Cloudflare. SSH trouble points at Tailscale. Rerun <code>singleserver connect</code> with the affected service to re-establish it: each connection repairs independently, none of them disturb running apps, and against a healthy connection the command verifies it and changes nothing.</p>
+            </div>
+            <div>
+                <strong>Going deeper.</strong>
+                <p>Everything underneath is standard and inspectable: <code>docker ps</code> for containers, <code>journalctl -u singleserver.service</code> for the daemon, and the tailscaled and cloudflared services log through systemd as usual. Whatever you find, you are debugging well-documented tools on a machine you fully control.</p>
             </div>
         </div>
     </section>
