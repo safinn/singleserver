@@ -524,6 +524,10 @@ func hasWord(value string, word string) bool {
 }
 
 func doctorHostResolves(w io.Writer, scope string, check string, host string) bool {
+	if strings.HasPrefix(host, "*.") {
+		writeCheck(w, scope, check, "skipped", host, "wildcard hosts are not resolvable directly")
+		return true
+	}
 	if err := commandRunFunc(5*time.Second, "getent", "hosts", host); err != nil {
 		writeCheck(w, scope, check, "failed", host, err.Error())
 		return false

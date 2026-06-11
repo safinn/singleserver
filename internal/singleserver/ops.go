@@ -701,11 +701,8 @@ func verifyDomains(args []string, w io.Writer) error {
 
 	for _, app := range apps {
 		for _, host := range app.Hosts {
-			if err := commandRunFunc(5*time.Second, "getent", "hosts", host); err != nil {
-				writeCheck(w, app.Name, "dns", "failed", host, err.Error())
+			if !doctorHostResolves(w, app.Name, "dns", host) {
 				failed = true
-			} else {
-				writeCheck(w, app.Name, "dns", "ok", host)
 			}
 			if cloudflareClient != nil {
 				target, err := verifyCloudflareDNSRecordFunc(host, state, cloudflareClient)
