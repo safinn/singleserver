@@ -56,7 +56,7 @@ if [ -z "$RUN_ID" ]; then
 fi
 
 DISTROS="$(printf "%s" "${E2E_DISTROS:-ubuntu debian amazonlinux rocky}" | tr ',' ' ')"
-CASES="$(printf "%s" "${E2E_CASES:-dockerfile static node}" | tr ',' ' ')"
+CASES="$(printf "%s" "${E2E_CASES:-dockerfile static static-build node}" | tr ',' ' ')"
 COMMAND_COVERAGE="${E2E_COMMAND_COVERAGE:-1}"
 WORK_ROOT="$E2E_DIR/work/$RUN_ID"
 ARTIFACT_DIR="$WORK_ROOT/artifacts"
@@ -88,7 +88,7 @@ assert_contains() {
   local haystack="$1"
   local needle="$2"
   local label="$3"
-  if ! grep -Fq "$needle" <<<"$haystack"; then
+  if ! grep -Fq -- "$needle" <<<"$haystack"; then
     printf 'Expected %s to contain %q. Output:\n%s\n' "$label" "$needle" "$haystack" >&2
     fail "$label did not contain expected text"
   fi
@@ -98,7 +98,7 @@ assert_not_contains() {
   local haystack="$1"
   local needle="$2"
   local label="$3"
-  if grep -Fq "$needle" <<<"$haystack"; then
+  if grep -Fq -- "$needle" <<<"$haystack"; then
     printf 'Expected %s not to contain %q. Output:\n%s\n' "$label" "$needle" "$haystack" >&2
     fail "$label contained unexpected text"
   fi
@@ -592,6 +592,17 @@ prepare_static_case() {
   )
 }
 
+prepare_static_build_case() {
+  local marker="$1"
+  reset_case_repo
+  (
+    cd "$REPO_DIR"
+    mkdir -p public
+    printf '<!doctype html><title>Single Server E2E Built Static</title><h1>%s</h1>\n' "$marker" > public/index.html
+    printf '%s\n' "$marker" > public/case.txt
+  )
+}
+
 prepare_node_case() {
   local marker="$1"
   reset_case_repo
@@ -635,6 +646,8 @@ const marker = "$marker";
 const port = Number(process.env.PORT || 3000);
 const storageDir = process.env.E2E_STORAGE_DIR || "/storage";
 const storedPath = path.join(storageDir, "message.txt");
+
+console.log("ops-runtime-log:" + marker);
 
 function send(res, status, body) {
   res.writeHead(status, { "content-type": "text/plain" });
@@ -683,6 +696,7 @@ prepare_case_repo() {
   case "$case_name" in
     dockerfile) prepare_dockerfile_case "$marker" ;;
     static) prepare_static_case "$marker" ;;
+    static-build) prepare_static_build_case "$marker" ;;
     node) prepare_node_case "$marker" ;;
     *) fail "Unknown E2E app case '$case_name'" ;;
   esac
@@ -795,6 +809,7 @@ case_public_path() {
   case "$1" in
     dockerfile) printf "/up" ;;
     static) printf "/case.txt" ;;
+    static-build) printf "/case.txt" ;;
     node) printf "/" ;;
     *) fail "Unknown E2E app case '$1'" ;;
   esac
@@ -820,6 +835,18 @@ add_case_app() {
         --domain "$domain" \
         --runtime static \
         --static-dir public \
+        --healthcheck-path /ready \
+        --non-interactive
+      ;;
+    static-build)
+      container_exec singleserver add "https://github.com/$GITHUB_TEST_REPO" \
+        --name "$APP_NAME" \
+        --branch main \
+        --domain "$domain" \
+        --runtime node \
+        --install 'mkdir -p .e2e && printf installed > .e2e/install' \
+        --build 'test "$(cat .e2e/install)" = installed && mkdir -p dist && cp public/case.txt dist/case.txt && cp public/index.html dist/index.html' \
+        --static-dir dist \
         --healthcheck-path /ready \
         --non-interactive
       ;;
@@ -981,6 +1008,8 @@ run_ops_scenario() {
   assert_contains "$out" "service: $APP_NAME" "$distro inspect"
   assert_contains "$out" "$domain" "$distro inspect"
   assert_contains "$out" "path: /readyz" "$distro inspect"
+  out="$(docker exec "$CONTAINER" singleserver logs "$APP_NAME" --runtime)"
+  assert_contains "$out" "ops-runtime-log:$initial_marker" "$distro runtime logs"
 
   log "Checking env and edit commands for $distro"
   container_exec singleserver env set "$APP_NAME" E2E_GREETING=hello --non-interactive
@@ -1000,6 +1029,9 @@ run_ops_scenario() {
   changed_marker="$PUSHED_MARKER"
   changed_sha="$PUSHED_SHA"
   wait_for_app_marker "$public_url" "$changed_marker|hello" "$distro ops webhook deploy"
+  out="$(docker exec "$CONTAINER" singleserver logs "$APP_NAME")"
+  assert_contains "$out" "[deploy:$APP_NAME-" "$distro deploy logs"
+  assert_contains "$out" "success total_ms=" "$distro deploy logs"
   container_exec singleserver deploy "$APP_NAME" "$initial_sha" --non-interactive
   wait_for_app_marker "$public_url" "$initial_marker|hello" "$distro ops rollback deploy"
   container_exec singleserver deploy "$APP_NAME" "$changed_sha" --non-interactive
@@ -1034,6 +1066,17 @@ run_ops_scenario() {
   fi
   wait_for_app_marker "https://$domain/write?value=after-$RUN_ID-$distro" "after-$RUN_ID-$distro" "$distro ops storage mutate"
   wait_for_app_marker "$stored_url" "after-$RUN_ID-$distro" "$distro ops storage mutated read"
+  out="$(docker exec "$CONTAINER" singleserver restore "$APP_NAME" "$backup_path" --no-restart --non-interactive)"
+  assert_contains "$out" "restore" "$distro restore no-restart"
+  assert_contains "$out" "restart" "$distro restore no-restart"
+  assert_contains "$out" "skipped" "$distro restore no-restart"
+  assert_contains "$out" "--no-restart" "$distro restore no-restart"
+  out="$(docker exec "$CONTAINER" cat "$storage_path/message.txt")"
+  assert_contains "$out" "before-$RUN_ID-$distro" "$distro restore no-restart storage"
+  container_exec singleserver deploy "$APP_NAME" --non-interactive
+  wait_for_app_marker "$stored_url" "before-$RUN_ID-$distro" "$distro ops restore no-restart after deploy"
+  wait_for_app_marker "https://$domain/write?value=after-normal-$RUN_ID-$distro" "after-normal-$RUN_ID-$distro" "$distro ops storage mutate after no-restart"
+  wait_for_app_marker "$stored_url" "after-normal-$RUN_ID-$distro" "$distro ops storage mutated read after no-restart"
   container_exec singleserver restore "$APP_NAME" "$backup_path" --non-interactive
   wait_for_app_marker "$stored_url" "before-$RUN_ID-$distro" "$distro ops restore"
 
