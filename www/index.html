@@ -14,18 +14,18 @@
     <meta name="theme-color" content="#ffffff">
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
 </head>
 <body class="page-home">
 
 <main>
-    <a href="https://github.com/dvassallo/singleserver" class="github-link" aria-label="View on GitHub">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-        </svg>
-    </a>
+    <nav class="site-nav" aria-label="Site">
+        <a href="/docs/">docs</a>
+        <a href="https://github.com/dvassallo/singleserver"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>github</a>
+    </nav>
 
     <header>
-        <h1><img class="brand-icon" src="server-single.svg?v=20260609" alt="" aria-hidden="true"><span class="brand-wordmark">single server</span></h1>
+        <h1><a class="brand-link" href="/" aria-label="Single Server home"><svg class="brand-icon" viewBox="0 0 512 233" fill="currentColor" aria-hidden="true"><path d="M69.8 23.3v23.3h372.4c12.8 0 23.2 10.4 23.3 23.3V163c0 12.8-10.4 23.2-23.3 23.3H69.8c-12.8 0-23.2-10.4-23.3-23.3V69.9C46.6 57 57 46.6 69.8 46.5zV0C31.2 0 0 31.2 0 69.8v93.1c0 38.6 31.2 69.8 69.8 69.8h372.4c38.6 0 69.8-31.3 69.8-69.8V69.8C512 31.2 480.8 0 442.2 0H69.8z"/><rect x="111.7" y="104.7" width="186.2" height="23.3" rx="11.6"/><circle cx="395.6" cy="116.4" r="23.3"/></svg></a><span class="brand-wordmark">single server</span></h1>
         <div
             class="tagline"
             data-slogan-rotator
@@ -187,50 +187,7 @@ singleserver add https://github.com/you/your-app-3</pre>
     </footer>
 </main>
 
-<script>
-    const sloganBadge = document.querySelector('[data-slogan-rotator]');
-    if (sloganBadge) {
-        const sloganText = sloganBadge.querySelector('.tagline-text');
-        const slogans = JSON.parse(sloganBadge.dataset.slogans);
-        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        let sloganIndex = 0;
 
-        window.setInterval(() => {
-            sloganIndex = (sloganIndex + 1) % slogans.length;
-
-            if (reduceMotion) {
-                sloganText.textContent = slogans[sloganIndex];
-                return;
-            }
-
-            sloganBadge.classList.add('is-changing');
-            window.setTimeout(() => {
-                sloganText.textContent = slogans[sloganIndex];
-            }, 320);
-            window.setTimeout(() => {
-                sloganBadge.classList.remove('is-changing');
-            }, 700);
-        }, 3000);
-    }
-
-    document.querySelectorAll('.copy-btn').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-            const codeBlock = btn.previousElementSibling;
-            const text = codeBlock.innerText.trim();
-            const originalIcon = btn.innerHTML;
-
-            try {
-                await navigator.clipboard.writeText(text);
-                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" style="color: #00ff88;"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
-                setTimeout(() => {
-                    btn.innerHTML = originalIcon;
-                }, 1600);
-            } catch (err) {
-                console.error('Failed to copy:', err);
-            }
-        });
-    });
-</script>
 
 </body>
 </html>

@@ -74,23 +74,80 @@ h1 {
 
 .brand-icon {
     display: block;
-    width: auto;
     height: 0.525em;
+    aspect-ratio: 512 / 233;
     flex: 0 0 auto;
     transform: translateY(0.078em);
 }
 
 .brand-wordmark { white-space: nowrap; }
 
+.brand-link {
+    display: block;
+    flex: 0 0 auto;
+    color: var(--ink);
+    transition: color 0.15s;
+}
+
+.brand-link:hover { color: var(--primary); }
+
+.brand-link:hover .brand-icon {
+    animation: logo-wiggle 750ms cubic-bezier(.2, 1.2, .2, 1);
+}
+
+@keyframes logo-wiggle {
+    0% { transform: translateY(0.078em) rotate(0deg) scale(1); }
+    40% { transform: translateY(-0.07em) rotate(-8deg) scale(1.16); }
+    72% { transform: translateY(0.1em) rotate(3deg) scale(0.98); }
+    100% { transform: translateY(0.078em) rotate(0deg) scale(1); }
+}
+
+.site-nav {
+    position: absolute;
+    top: 40px;
+    right: 40px;
+    display: flex;
+    gap: 10px;
+}
+
+.site-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-weight: 700;
+    text-transform: lowercase;
+    color: var(--ink);
+    text-decoration: none;
+    border: 2px solid var(--ink);
+    box-shadow: 3px 3px 0 var(--highlight);
+    background: #fff;
+    padding: 3px 12px;
+}
+
+.site-nav svg {
+    width: 17px;
+    height: 17px;
+    display: block;
+}
+
+.site-nav a:hover { background: var(--tertiary); }
+
 .tagline {
     font-weight: 700;
+    font-size: 1.5rem;
+    line-height: 1.15;
     background: var(--tertiary);
     display: inline-block;
-    max-width: 100%;
     padding: 5px 10px;
     transform: rotate(-1deg);
     border: 2px solid var(--ink);
     box-shadow: 4px 4px 0 var(--ink);
+    min-height: calc(1.5rem * 1.15 + 14px);
+    width: min(100%, 560px);
+    max-width: 100%;
+    overflow: hidden;
+    position: relative;
+    vertical-align: top;
 }
 
 .lede {
@@ -232,17 +289,13 @@ footer {
     padding-top: 30px;
 }
 
-footer a,
-.top-links a {
+footer a {
     color: var(--ink);
     text-decoration: none;
     border-bottom: 3px solid var(--primary);
 }
 
-footer a:hover,
-.top-links a:hover {
-    border-color: var(--secondary);
-}
+footer a:hover { border-color: var(--secondary); }
 
 /* Home page */
 
@@ -250,25 +303,9 @@ footer a:hover,
 
 .page-home h2 { margin: 40px 0 20px; }
 
-.github-link {
-    position: absolute;
-    top: 40px;
-    right: 40px;
-    color: var(--ink);
-    transition: transform 0.2s;
-}
-
-.github-link:hover { transform: scale(1.1); }
-.github-link svg { width: 32px; height: 32px; display: block; }
-
-.page-home .tagline {
-    font-size: 1.5rem;
-    line-height: 1.15;
-    min-height: calc(1.5rem * 1.15 + 14px);
-    width: min(100%, 560px);
-    overflow: hidden;
-    position: relative;
-    vertical-align: top;
+.tagline[data-slogan-rotator] {
+    cursor: pointer;
+    user-select: none;
 }
 
 .tagline-text {
@@ -385,19 +422,6 @@ footer a:hover,
 .page-docs p { margin-bottom: 14px; }
 
 .page-docs section > p { max-width: 800px; }
-
-.top-links {
-    display: flex;
-    justify-content: flex-end;
-    gap: 18px;
-    margin-bottom: 24px;
-    font-weight: 700;
-}
-
-.page-docs .tagline {
-    font-size: 1.35rem;
-    line-height: 1.2;
-}
 
 .toc {
     float: right;
@@ -615,11 +639,27 @@ footer a:hover,
 /* Mobile */
 
 @media (max-width: 760px) {
-    body { padding: 24px 14px; overflow-x: hidden; }
+    body { padding: 0; overflow-x: hidden; }
 
     main {
-        padding: 20px;
-        box-shadow: 8px 8px 0 var(--ink);
+        padding: 18px;
+        border: none;
+        box-shadow: none;
+    }
+
+    h1 { font-size: 2.5rem; gap: 10px; }
+
+    h2 { font-size: 1.6rem; }
+
+    .site-nav {
+        position: static;
+        justify-content: flex-end;
+        margin-bottom: 20px;
+    }
+
+    .tagline {
+        font-size: min(1rem, 5vw - 3px);
+        min-height: calc(1em * 1.15 + 14px);
     }
 
     .flow-box { padding: 20px; }
@@ -634,33 +674,7 @@ footer a:hover,
         height: 22px;
     }
 
-    .code-block {
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-    }
-
-    .page-home h1 {
-        font-size: 2.25rem;
-        gap: 10px;
-        margin-top: 34px;
-    }
-
-    .github-link { top: 20px; right: 20px; }
-
-    .page-home .tagline {
-        font-size: 1.18rem;
-        min-height: calc(1.18rem * 1.15 * 2 + 14px);
-    }
-
     .feature-grid { grid-template-columns: 1fr; }
-
-    .page-docs h1 { font-size: 2.6rem; gap: 10px; }
-
-    .page-docs .tagline {
-        font-size: 1.08rem;
-        align-self: flex-start;
-    }
 
     .page-docs header {
         display: flex;
@@ -674,30 +688,28 @@ footer a:hover,
         order: 4;
     }
 
+    .command-index { gap: 24px; }
+
     .command-index-group {
         flex-direction: column;
-        gap: 6px;
+        gap: 9px;
     }
 
-    .command-index-label { margin-top: 0; }
-
-    .top-links {
-        flex-wrap: wrap;
-        justify-content: flex-start;
+    .command-index-label {
+        flex: 0 0 auto;
+        margin-top: 0;
     }
 }
 
 @media (max-width: 360px) {
-    .page-home h1 {
-        font-size: 1.95rem;
-        gap: 8px;
-    }
+    h1 { font-size: 2rem; gap: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .tagline,
     .tagline.is-changing,
-    .tagline.is-changing .tagline-text {
+    .tagline.is-changing .tagline-text,
+    .brand-link:hover .brand-icon {
         animation: none;
     }
 }
