@@ -74,6 +74,7 @@ APP_NAME=""
 DISTRO_IMAGE=""
 TAILSCALE_HOSTNAME=""
 TAILSCALE_STATE_DIR=""
+INSTALLER_POST_APP_IDEMPOTENCY_CHECKED=""
 
 mkdir -p "$WWW_DIR/bin"
 
@@ -103,6 +104,16 @@ assert_not_contains() {
   if grep -Fq -- "$needle" <<<"$haystack"; then
     printf 'Expected %s not to contain %q. Output:\n%s\n' "$label" "$needle" "$haystack" >&2
     fail "$label contained unexpected text"
+  fi
+}
+
+assert_equal() {
+  local got="$1"
+  local want="$2"
+  local label="$3"
+  if [ "$got" != "$want" ]; then
+    printf 'Expected %s to be %q, got %q\n' "$label" "$want" "$got" >&2
+    fail "$label did not match"
   fi
 }
 
@@ -367,6 +378,22 @@ container_bash() {
   docker exec "$CONTAINER" bash -lc "$*"
 }
 
+container_file_sha() {
+  local path="$1"
+  docker exec "$CONTAINER" sh -c 'if [ -f "$1" ]; then sha256sum "$1" | awk "{print \$1}"; else printf missing; fi' sh "$path"
+}
+
+container_json_field() {
+  local path="$1"
+  local field="$2"
+  local body
+  body="$(docker exec "$CONTAINER" cat "$path" 2>/dev/null || true)"
+  if [ -z "$body" ]; then
+    return 0
+  fi
+  printf "%s" "$body" | json_field "$field" 2>/dev/null || true
+}
+
 teardown_host() {
   local old_opts="$-"
   set +e
@@ -516,13 +543,84 @@ start_distro_host() {
 
 install_singleserver() {
   log "Installing Single Server in $CONTAINER"
+  run_install_script
+  container_exec singleserver version
+}
+
+run_install_script() {
   docker exec \
     -e SINGLESERVER_DOWNLOAD_BASE_URL="$ARTIFACT_BASE_URL" \
     -e SINGLESERVER_INSTALL_SKIP_FIRST_RUN=1 \
     -e SINGLESERVER_DOCKER_STORAGE_DRIVER="${SINGLESERVER_E2E_DOCKER_STORAGE_DRIVER:-vfs}" \
     "$CONTAINER" bash /workspace/www/install.sh
+}
 
-  container_exec singleserver version
+verify_initial_installer_idempotency() {
+  local distro="$1"
+  local apps_sha env_sha service_sha root_key_sha deploy_auth_sha
+
+  log "Checking installer idempotency before provider setup on $distro"
+  apps_sha="$(container_file_sha /etc/singleserver/apps.yml)"
+  env_sha="$(container_file_sha /etc/singleserver/singleserver.env)"
+  service_sha="$(container_file_sha /etc/systemd/system/singleserver.service)"
+  root_key_sha="$(container_file_sha /root/.ssh/id_ed25519.pub)"
+  deploy_auth_sha="$(container_file_sha /home/deploy/.ssh/authorized_keys)"
+
+  run_install_script
+
+  assert_equal "$(container_file_sha /etc/singleserver/apps.yml)" "$apps_sha" "$distro installer apps.yml before provider setup"
+  assert_equal "$(container_file_sha /etc/singleserver/singleserver.env)" "$env_sha" "$distro installer env before provider setup"
+  assert_equal "$(container_file_sha /etc/systemd/system/singleserver.service)" "$service_sha" "$distro installer systemd service before provider setup"
+  assert_equal "$(container_file_sha /root/.ssh/id_ed25519.pub)" "$root_key_sha" "$distro installer root SSH key before provider setup"
+  assert_equal "$(container_file_sha /home/deploy/.ssh/authorized_keys)" "$deploy_auth_sha" "$distro installer deploy authorized_keys before provider setup"
+  container_exec singleserver doctor
+}
+
+verify_live_app_installer_idempotency() {
+  local distro="$1"
+  local case_name="$2"
+  local app_name="$3"
+  local public_url="$4"
+  local marker="$5"
+  local apps_sha env_sha cloudflare_sha cloudflared_config_sha cloudflared_credentials_sha github_sha github_key_sha
+  local tunnel_id public_funnel_url
+  local current_public_funnel_url
+
+  if [ "$INSTALLER_POST_APP_IDEMPOTENCY_CHECKED" = "1" ]; then
+    return 0
+  fi
+
+  log "Checking installer idempotency after live app deploy on $distro"
+  apps_sha="$(container_file_sha /etc/singleserver/apps.yml)"
+  env_sha="$(container_file_sha /etc/singleserver/singleserver.env)"
+  cloudflare_sha="$(container_file_sha /etc/singleserver/cloudflare.json)"
+  cloudflared_config_sha="$(container_file_sha /etc/cloudflared/singleserver.yml)"
+  cloudflared_credentials_sha="$(container_file_sha /etc/cloudflared/singleserver.json)"
+  github_sha="$(container_file_sha /etc/singleserver/github.json)"
+  github_key_sha="$(container_file_sha /etc/singleserver/github.private-key.pem)"
+  tunnel_id="$(container_json_field /etc/singleserver/cloudflare.json tunnel_id)"
+  public_funnel_url="$(container_bash ". /etc/singleserver/singleserver.env; printf '%s' \"\${SINGLESERVER_PUBLIC_URL:-}\"")"
+
+  if [ "$cloudflare_sha" = "missing" ] || [ "$github_sha" = "missing" ] || [ "$tunnel_id" = "" ] || [ "$public_funnel_url" = "" ]; then
+    fail "$distro installer idempotency needs connected Cloudflare, GitHub, and Tailscale state"
+  fi
+
+  run_install_script
+
+  assert_equal "$(container_file_sha /etc/singleserver/apps.yml)" "$apps_sha" "$distro installer apps.yml after live app"
+  assert_equal "$(container_file_sha /etc/singleserver/singleserver.env)" "$env_sha" "$distro installer env after live app"
+  assert_equal "$(container_file_sha /etc/singleserver/cloudflare.json)" "$cloudflare_sha" "$distro installer Cloudflare state after live app"
+  assert_equal "$(container_file_sha /etc/cloudflared/singleserver.yml)" "$cloudflared_config_sha" "$distro installer cloudflared config after live app"
+  assert_equal "$(container_file_sha /etc/cloudflared/singleserver.json)" "$cloudflared_credentials_sha" "$distro installer cloudflared credentials after live app"
+  assert_equal "$(container_file_sha /etc/singleserver/github.json)" "$github_sha" "$distro installer GitHub state after live app"
+  assert_equal "$(container_file_sha /etc/singleserver/github.private-key.pem)" "$github_key_sha" "$distro installer GitHub key after live app"
+  assert_equal "$(container_json_field /etc/singleserver/cloudflare.json tunnel_id)" "$tunnel_id" "$distro installer Cloudflare tunnel ID after live app"
+  current_public_funnel_url="$(container_bash ". /etc/singleserver/singleserver.env; printf '%s' \"\${SINGLESERVER_PUBLIC_URL:-}\"")"
+  assert_equal "$current_public_funnel_url" "$public_funnel_url" "$distro installer Tailscale Funnel URL after live app"
+
+  container_exec singleserver doctor "$app_name"
+  wait_for_app_marker "$public_url" "$marker" "$distro/$case_name installer idempotency live app"
+  INSTALLER_POST_APP_IDEMPOTENCY_CHECKED=1
 }
 
 connect_tailscale() {
@@ -1047,6 +1145,7 @@ run_app_case() {
 
   log "Waiting for initial $case_name app on $distro"
   wait_for_app_marker "$public_url" "$initial_marker" "$distro/$case_name initial deploy"
+  verify_live_app_installer_idempotency "$distro" "$case_name" "$APP_NAME" "$public_url" "$initial_marker"
 
   log "Pushing $case_name change to trigger real GitHub webhook"
   changed_marker="changed-$RUN_ID-$distro-$case_name"
@@ -1195,7 +1294,9 @@ run_distro() {
 
   build_distro_image "$distro"
   start_distro_host "$distro" "$DISTRO_IMAGE"
+  INSTALLER_POST_APP_IDEMPOTENCY_CHECKED=""
   install_singleserver
+  verify_initial_installer_idempotency "$distro"
   connect_tailscale
   connect_cloudflare
   connect_github_app

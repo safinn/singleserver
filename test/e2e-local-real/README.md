@@ -113,6 +113,8 @@ E2E_DISTROS=amazonlinux E2E_CASES=node test/e2e-local-real/run.sh
 The run verifies:
 
 - Local installer downloads the just-built binary.
+- Re-running the installer on an already-installed host preserves base config,
+  SSH keys, and service wiring.
 - Docker, Kamal, Tailscale, cloudflared, registry, deploy user, and daemon boot.
 - Tailscale Funnel exposes the GitHub webhook endpoint.
 - Cloudflare Tunnel and DNS route a temporary app domain.
@@ -126,6 +128,9 @@ The run verifies:
 - The static app covers a generated Dockerfile with generated `/ready` container readiness.
 - The Node app covers generated Node containerization with `/readyz` container readiness and no external healthcheck URL.
 - Pushed GitHub commits trigger webhook deploys for every app case.
+- Re-running the installer after a live app exists preserves `apps.yml`,
+  Tailscale Funnel URL, GitHub App credentials, Cloudflare tunnel state,
+  cloudflared config, and the live app route.
 - The command coverage scenario exercises logs, runtime logs, env vars,
   generated config edits, domain aliases, storage, backup, and restore.
 - The app is removed and the temporary DNS record is cleaned up.
