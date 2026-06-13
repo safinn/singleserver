@@ -50,6 +50,77 @@ func TestDomainsAndStorageCommandsUpdateConfig(t *testing.T) {
 	}
 }
 
+func TestStorageDisableClearsConfigAndOptionallyDeletes(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	stubCommandRun(t)
+	if err := os.WriteFile(configPath, []byte("apps:\n  - acme/scoreboard\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	storagePath := filepath.Join(dir, "storage")
+	logger := log.New(io.Discard, "", 0)
+
+	var out bytes.Buffer
+	if err := cliStorage([]string{"enable", "scoreboard", "--path", storagePath, "--no-deploy", "--non-interactive"}, &out, logger); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(storagePath); err != nil {
+		t.Fatalf("expected storage dir created: %v", err)
+	}
+
+	// Disable without --delete keeps the directory.
+	out.Reset()
+	if err := cliStorage([]string{"disable", "scoreboard", "--no-deploy", "--non-interactive"}, &out, logger); err != nil {
+		t.Fatal(err)
+	}
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Apps[0].Storage != nil {
+		t.Fatalf("expected storage cleared, got %#v", config.Apps[0].Storage)
+	}
+	if !strings.Contains(out.String(), "scoreboard\tstorage\tkept\t"+storagePath) {
+		t.Fatalf("expected kept message, got:\n%s", out.String())
+	}
+	if _, err := os.Stat(storagePath); err != nil {
+		t.Fatalf("expected storage dir kept: %v", err)
+	}
+
+	// Re-enable, then disable with --delete removes the directory.
+	out.Reset()
+	if err := cliStorage([]string{"enable", "scoreboard", "--path", storagePath, "--no-deploy", "--non-interactive"}, &out, logger); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := cliStorage([]string{"disable", "scoreboard", "--delete", "--no-deploy", "--non-interactive"}, &out, logger); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "scoreboard\tstorage\tok\t"+storagePath+"\tdeleted") {
+		t.Fatalf("expected deleted message, got:\n%s", out.String())
+	}
+	if _, err := os.Stat(storagePath); !os.IsNotExist(err) {
+		t.Fatalf("expected storage dir deleted, stat err=%v", err)
+	}
+}
+
+func TestStorageDisableErrorsWhenNotEnabled(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "apps.yml")
+	t.Setenv("SINGLESERVER_CONFIG", configPath)
+	stubCommandRun(t)
+	if err := os.WriteFile(configPath, []byte("apps:\n  - acme/scoreboard\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	logger := log.New(io.Discard, "", 0)
+	err := cliStorage([]string{"disable", "scoreboard", "--no-deploy", "--non-interactive"}, &out, logger)
+	if err == nil || !strings.Contains(err.Error(), "no storage configured") {
+		t.Fatalf("expected no-storage error, got: %v", err)
+	}
+}
+
 func TestStorageEnableFailsBeforeConfigWriteWhenOwnershipFixFails(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "apps.yml")

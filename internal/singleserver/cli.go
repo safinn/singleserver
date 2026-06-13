@@ -222,7 +222,7 @@ Global options:
 		{"Resources", [][2]string{
 			{"domains <add|remove|list|verify> ...", "Manage app domains"},
 			{"env <set|list|unset> ...", "Manage app env vars"},
-			{"storage enable <app> [options]", "Enable persistent storage"},
+			{"storage <enable|disable> <app> [options]", "Enable or disable persistent storage"},
 			{"backup <app>", "Back up app storage"},
 			{"restore <app> <backup> [--no-restart]", "Restore app storage"},
 		}},

@@ -412,15 +412,17 @@ singleserver env unset &lt;app&gt; KEY [--non-interactive]</pre>
             </div>
 
             <div class="command" id="cmd-storage">
-                <h4>Enable persistent storage</h4>
+                <h4>Persistent storage</h4>
                 <div class="code-wrapper">
-                    <pre class="code-block">singleserver storage enable &lt;app&gt; [--mount /storage] [--path /srv/storage/&lt;app&gt;] [--no-deploy] [--non-interactive]</pre>
+                    <pre class="code-block">singleserver storage enable &lt;app&gt; [--mount /storage] [--path /srv/storage/&lt;app&gt;] [--no-deploy] [--non-interactive]
+singleserver storage disable &lt;app&gt; [--delete] [--no-deploy] [--non-interactive]</pre>
                 </div>
-                <p>Containers are disposable. Storage is not. This creates a host directory and mounts it into the container at <code>/storage</code>, surviving every deploy.</p>
+                <p>Containers are disposable. Storage is not. <code>enable</code> creates a host directory and mounts it into the container at <code>/storage</code>, surviving every deploy. <code>disable</code> detaches it again and redeploys without the mount, keeping the directory on disk unless you pass <code>--delete</code>.</p>
                 <ul class="option-list">
                     <li><code>--mount &lt;path&gt;</code> <span class="opt-badge">Default: /storage</span><span>Where the directory appears inside the container.</span></li>
                     <li><code>--path &lt;path&gt;</code> <span class="opt-badge">Default: /srv/storage/&lt;app&gt;</span><span>Where the directory lives on the host.</span></li>
-                    <li><code>--no-deploy</code><span>Stage the storage config without applying it to the running app yet.</span></li>
+                    <li><code>--delete</code><span>On <code>disable</code>, also remove the host directory and its data. Off by default.</span></li>
+                    <li><code>--no-deploy</code><span>Stage the storage change without applying it to the running app yet.</span></li>
                     <li><code>--non-interactive</code><span>Never prompt. The app name must be supplied.</span></li>
                 </ul>
             </div>
