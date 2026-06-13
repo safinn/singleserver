@@ -56,13 +56,15 @@ func TestUsageMentionsVersionCommand(t *testing.T) {
 	printUsage(&out)
 
 	got := out.String()
-	if !strings.Contains(got, "singleserver version") {
-		t.Fatalf("expected version usage, got:\n%s", got)
+	for _, want := range []string{"Setup", "Apps", "Monitoring", "Resources"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q group header, got:\n%s", want, got)
+		}
 	}
-	if !strings.Contains(got, "version        Print the installed Single Server version.") {
-		t.Fatalf("expected version command description, got:\n%s", got)
+	if !strings.Contains(got, "version") || !strings.Contains(got, "Print the installed version") {
+		t.Fatalf("expected version command, got:\n%s", got)
 	}
-	if strings.Contains(got, "singleserver init") || strings.Contains(got, "init           ") {
+	if strings.Contains(got, "singleserver init") || strings.Contains(got, "\ninit") {
 		t.Fatalf("did not expect init command in usage, got:\n%s", got)
 	}
 }

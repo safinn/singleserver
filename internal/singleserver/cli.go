@@ -190,51 +190,49 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `Single Server
 
 Usage:
-  singleserver [--non-interactive] <command> [args]
+  singleserver [--non-interactive] [--output json] <command> [args]
 
 Global options:
   --non-interactive  Never prompt. Missing required input is an error.
-
-Common commands:
-  singleserver version
-  singleserver connect tailscale [--auth-key <key>] [--hostname <name>]
-  singleserver connect cloudflare [--account <id>] [--tunnel <name>]
-  singleserver connect github
-  singleserver list
-  singleserver status
-  singleserver add <github-url> [options]
-  singleserver edit <app|owner/repo|github-url> [options]
-  singleserver deploy [owner/repo|app] [ref]
-  singleserver inspect <owner/repo|app>
-  singleserver doctor [app]
-  singleserver logs [app] [options]
-  singleserver domains <add|remove|list|verify> ...
-  singleserver env <set|list|unset> ...
-  singleserver storage enable <app> [--mount /storage] [--path /srv/storage/app] [--no-deploy]
-  singleserver backup <app>
-  singleserver restore <app> <backup-id-or-path> [--no-restart]
-  singleserver remove <app> [--delete-storage] [--delete-repo]
-  singleserver upgrade
-
-Commands:
-  version        Print the installed Single Server version.
-  connect        Connect or repair Tailscale, Cloudflare, or GitHub.
-  list           Show configured apps.
-  status         Check the local daemon, apps, and optional healthchecks.
-  add            Add and deploy a GitHub repository.
-  edit           Edit app config interactively or with flags.
-  deploy         Deploy a configured app, prompting for an app when omitted.
-  inspect        Print the generated Kamal deploy.yml for a configured app.
-  doctor         Check config, deploy plumbing, GitHub App access, checkouts, deploy logs, and optional healthchecks.
-  logs           Show recent deploy logs, optionally filtered by app.
-  domains        Manage app domains in apps.yml.
-  env            Manage server-side app environment variables.
-  storage        Manage persistent app storage.
-  backup         Back up app storage.
-  restore        Restore app storage from a backup.
-  remove         Remove app config and stop matching containers.
-  upgrade        Re-run the installer and restart Single Server.
+  --output json      Emit JSON instead of text.
 `)
+
+	groups := []struct {
+		title    string
+		commands [][2]string
+	}{
+		{"Setup", [][2]string{
+			{"connect <tailscale|cloudflare|github>", "Connect or repair a provider"},
+			{"upgrade", "Re-run the installer and restart Single Server"},
+			{"version", "Print the installed version"},
+		}},
+		{"Apps", [][2]string{
+			{"add <github-url> [options]", "Add and deploy a repository"},
+			{"edit <app> [options]", "Edit app config"},
+			{"deploy [app] [ref]", "Deploy a configured app"},
+			{"remove <app> [options]", "Remove an app, optionally its repo and storage"},
+		}},
+		{"Monitoring", [][2]string{
+			{"list", "Show configured apps"},
+			{"status", "Show daemon and app health"},
+			{"logs [app] [options]", "Show recent deploy or runtime logs"},
+			{"doctor [app]", "Run full diagnostic checks"},
+			{"inspect <app>", "Print the generated Kamal config"},
+		}},
+		{"Resources", [][2]string{
+			{"domains <add|remove|list|verify> ...", "Manage app domains"},
+			{"env <set|list|unset> ...", "Manage app env vars"},
+			{"storage enable <app> [options]", "Enable persistent storage"},
+			{"backup <app>", "Back up app storage"},
+			{"restore <app> <backup> [--no-restart]", "Restore app storage"},
+		}},
+	}
+	for _, group := range groups {
+		fmt.Fprintf(w, "\n%s\n", group.title)
+		for _, cmd := range group.commands {
+			fmt.Fprintf(w, "  %-40s %s\n", cmd[0], cmd[1])
+		}
+	}
 }
 
 func printVersion(w io.Writer) error {
