@@ -203,9 +203,14 @@ docker exec \
 TAILSCALE_E2E_AUTHKEY=""
 
 log "Creating private GitHub App through manifest flow"
-setup_output="$(docker exec "$CONTAINER" singleserver connect github)"
+setup_output="$(docker exec "$CONTAINER" singleserver connect github --output json)"
 printf "%s\n" "$setup_output"
-setup_url="$(printf "%s\n" "$setup_output" | awk '/github[[:space:]]+connect/ { print $4; exit }')"
+setup_url="$(printf "%s\n" "$setup_output" | python3 -c 'import json, sys
+report = json.load(sys.stdin)
+for check in report.get("checks", []):
+    if check.get("check") == "connect":
+        print(check.get("value", ""))
+        break')"
 if [ -z "$setup_url" ]; then
   echo "Could not find setup URL in output." >&2
   exit 1

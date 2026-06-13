@@ -357,8 +357,16 @@ wait_for_domain_verify() {
   local label="$2"
   local out
   for _ in $(seq 1 90); do
-    out="$(docker exec "$CONTAINER" singleserver domains verify "$app_name" 2>&1 || true)"
-    if grep -Fq "cloudflare_dns" <<<"$out" && ! grep -Fq "failed" <<<"$out"; then
+    out="$(docker exec "$CONTAINER" singleserver domains verify "$app_name" --output json 2>/dev/null || true)"
+    if printf '%s' "$out" | python3 -c 'import json, sys
+try:
+    report = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+checks = report.get("checks", [])
+has_dns = any(c.get("check") == "cloudflare_dns" for c in checks)
+any_failed = any(c.get("status") == "failed" for c in checks)
+sys.exit(0 if has_dns and not any_failed else 1)'; then
       return 0
     fi
     sleep 2
@@ -442,9 +450,16 @@ run_ops_scenario() {
   out="$(docker exec "$CONTAINER" singleserver list)"
   assert_contains "$out" "$APP_NAME" "$distro list"
   assert_contains "$out" "$domain" "$distro list"
-  out="$(docker exec "$CONTAINER" singleserver status)"
+  out="$(docker exec "$CONTAINER" singleserver status --output json)"
   assert_contains "$out" "$APP_NAME" "$distro status"
-  assert_contains "$out" "runtime=running:" "$distro status"
+  if ! printf '%s' "$out" | python3 -c 'import json, sys
+report = json.load(sys.stdin)
+name = sys.argv[1]
+app = next((a for a in report.get("apps", []) if a.get("name") == name), None)
+sys.exit(0 if app and app.get("state") == "running" else 1)' "$APP_NAME"; then
+    printf '%s\n' "$out" >&2
+    fail "$distro status: $APP_NAME is not running"
+  fi
   out="$(docker exec "$CONTAINER" singleserver inspect "$APP_NAME")"
   assert_contains "$out" "service: $APP_NAME" "$distro inspect"
   assert_contains "$out" "$domain" "$distro inspect"
@@ -496,11 +511,15 @@ run_ops_scenario() {
   wait_for_app_marker "https://$domain/write?value=before-$RUN_ID-$distro" "before-$RUN_ID-$distro" "$distro ops storage write"
   wait_for_app_marker "$stored_url" "before-$RUN_ID-$distro" "$distro ops storage read"
   container_bash "sqlite3 '$storage_path/state.db' 'create table if not exists data(value text); insert into data values (\"before\");'"
-  out="$(docker exec "$CONTAINER" singleserver backup "$APP_NAME")"
-  assert_contains "$out" "backup" "$distro backup"
-  assert_contains "$out" "ok" "$distro backup"
+  out="$(docker exec "$CONTAINER" singleserver backup "$APP_NAME" --output json)"
   assert_contains "$out" "sqlite=1" "$distro backup"
-  backup_path="$(awk -v app="$APP_NAME" '$1 == app && $2 == "backup" && $3 == "ok" {print $4; exit}' <<<"$out")"
+  backup_path="$(printf '%s' "$out" | python3 -c 'import json, sys
+report = json.load(sys.stdin)
+for check in report.get("checks", []):
+    if check.get("check") == "backup" and check.get("status") == "ok":
+        value = check.get("value", "")
+        print(value.split()[0] if value else "")
+        break')"
   if [ -z "$backup_path" ]; then
     printf 'Backup output for %s:\n%s\n' "$distro" "$out" >&2
     fail "could not parse backup path"

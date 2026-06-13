@@ -10,9 +10,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
-	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 )
 
@@ -27,21 +25,75 @@ func RunCLI(args []string, logger *log.Logger) error {
 		return Run(logger)
 	}
 
+	jsonOut, args, err := extractOutputFlag(args)
+	if err != nil {
+		return err
+	}
+
 	enableColorForStdout()
-	var w io.Writer
-	var flush func() error
-	if useColor {
-		renderer := newCheckRenderer(os.Stdout)
-		w, flush = renderer, renderer.Flush
+	var out *Output
+	if jsonOut {
+		useColor = false
+		out = newJSONOutput(os.Stdout)
+		// JSON output implies machine use; never block on a prompt.
+		args = append([]string{"--non-interactive"}, args...)
 	} else {
-		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		w, flush = tw, tw.Flush
+		out = newTextOutput(os.Stdout)
 	}
-	err := runCLI(args, logger, w)
-	if flushErr := flush(); err == nil && flushErr != nil {
-		err = flushErr
+
+	runErr := runCLI(args, logger, out)
+	if flushErr := out.Flush(); runErr == nil && flushErr != nil {
+		runErr = flushErr
 	}
-	return err
+	return runErr
+}
+
+// extractOutputFlag pulls a global --output json|text (or --json) from anywhere
+// in the args so it can precede or follow the subcommand, and returns the
+// remaining args with it removed.
+func extractOutputFlag(args []string) (bool, []string, error) {
+	jsonOut := false
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			rest = append(rest, args[i:]...)
+			return jsonOut, rest, nil
+		case arg == "--json":
+			jsonOut = true
+		case arg == "--output":
+			if i+1 >= len(args) {
+				return false, nil, errors.New("--output needs a value: json or text")
+			}
+			i++
+			v, err := parseOutputValue(args[i])
+			if err != nil {
+				return false, nil, err
+			}
+			jsonOut = v
+		case strings.HasPrefix(arg, "--output="):
+			v, err := parseOutputValue(strings.TrimPrefix(arg, "--output="))
+			if err != nil {
+				return false, nil, err
+			}
+			jsonOut = v
+		default:
+			rest = append(rest, arg)
+		}
+	}
+	return jsonOut, rest, nil
+}
+
+func parseOutputValue(v string) (bool, error) {
+	switch v {
+	case "json":
+		return true, nil
+	case "text":
+		return false, nil
+	default:
+		return false, fmt.Errorf("unknown --output value %q: use json or text", v)
+	}
 }
 
 func runCLI(args []string, logger *log.Logger, stdout io.Writer) error {
@@ -60,8 +112,7 @@ func runCLI(args []string, logger *log.Logger, stdout io.Writer) error {
 			printUsage(stdout)
 			return nil
 		case "version", "--version":
-			printVersion(stdout)
-			return nil
+			return printVersion(stdout)
 		case "connect":
 			if len(args) >= 2 {
 				switch args[1] {
@@ -110,7 +161,15 @@ func runCLI(args []string, logger *log.Logger, stdout io.Writer) error {
 	})
 }
 
+// writeCheck records a check. When the writer is an *Output (the production
+// path) it stores a structured record for the text or JSON renderer. For a
+// plain writer it falls back to the tab-delimited form, which keeps direct
+// callers and tests simple.
 func writeCheck(w io.Writer, scope string, check string, status string, value string, details ...string) {
+	if o, ok := w.(*Output); ok {
+		o.addCheck(scope, check, status, value, details...)
+		return
+	}
 	value = valueOrDash(value)
 	detail := strings.Join(nonEmptyStrings(details...), " ")
 	if detail == "" {
@@ -182,7 +241,7 @@ Commands:
 `)
 }
 
-func printVersion(w io.Writer) {
+func printVersion(w io.Writer) error {
 	version := Version
 	commit := Commit
 	buildDate := BuildDate
@@ -218,42 +277,38 @@ func printVersion(w io.Writer) {
 	if strings.TrimSpace(buildDate) == "" {
 		buildDate = "unknown"
 	}
-	fmt.Fprintf(w, "singleserver %s\n", bold(version))
-	fmt.Fprintf(w, "%s %s\n", dim("commit"), commit)
-	fmt.Fprintf(w, "%s  %s\n", dim("built"), buildDate)
+	out, owned := asOutput(w)
+	out.versionInfo(VersionView{Version: version, Commit: commit, Built: buildDate})
+	if owned {
+		return out.Flush()
+	}
+	return nil
 }
 
 func cliList(w io.Writer) error {
-	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
-	config, err := LoadConfig(configPath)
+	config, err := LoadConfig(envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml"))
 	if err != nil {
 		return err
 	}
+	out, owned := asOutput(w)
 	if len(config.Apps) == 0 {
-		printNoApps(w)
-		return nil
+		out.listApps(nil)
+		return flushIfOwned(out, owned)
 	}
 	containers, containerErr := runningAppContainers()
 	journal, _ := recentSingleServerJournal()
-
-	rows := [][]tcell{{
-		cell("APP", bold("APP")),
-		cell("STATUS", bold("STATUS")),
-		cell("DOMAIN", bold("DOMAIN")),
-		cell("REPO", bold("REPO")),
-	}}
+	views := make([]AppView, 0, len(config.Apps))
 	for _, app := range config.Apps {
-		word := listStateWord(appSummaryStatus(app, containers, containerErr, journal))
-		st := listState(word)
-		rows = append(rows, []tcell{
-			plainCell(app.Name),
-			cell("● "+word, paint(stateColor(st), "● "+word)),
-			domainCell(app),
-			repoCell(app),
+		views = append(views, AppView{
+			Name:   app.Name,
+			Repo:   app.Repo,
+			Branch: app.Branch,
+			Hosts:  app.Hosts,
+			State:  listStateWord(appSummaryStatus(app, containers, containerErr, journal)),
 		})
 	}
-	writeTable(w, rows, 2)
-	return nil
+	out.listApps(views)
+	return flushIfOwned(out, owned)
 }
 
 // listStateWord collapses the richer summary status into the four words the
@@ -271,156 +326,81 @@ func listStateWord(summary string) string {
 	}
 }
 
-func listState(word string) stateKind {
-	switch word {
-	case "running":
-		return stateOK
-	case "stopped":
-		return stateWarn
-	case "failed":
-		return stateFail
-	default:
-		return stateMuted
-	}
-}
-
-func domainCell(app AppConfig) tcell {
-	if len(app.Hosts) == 0 {
-		return cell("–", dim("–"))
-	}
-	primary := app.Hosts[0]
-	if len(app.Hosts) == 1 {
-		return plainCell(primary)
-	}
-	extra := fmt.Sprintf(" +%d", len(app.Hosts)-1)
-	return cell(primary+extra, primary+dim(extra))
-}
-
-func repoCell(app AppConfig) tcell {
-	if strings.TrimSpace(app.Branch) == "" {
-		return plainCell(app.Repo)
-	}
-	suffix := " (" + app.Branch + ")"
-	return cell(app.Repo+suffix, app.Repo+dim(suffix))
-}
-
 func cliStatus(w io.Writer) error {
-	configPath := envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml")
-	config, err := LoadConfig(configPath)
+	config, err := LoadConfig(envDefault("SINGLESERVER_CONFIG", "/etc/singleserver/apps.yml"))
 	if err != nil {
 		return err
 	}
+	out, owned := asOutput(w)
 
-	writeDaemonStatus(w, len(config.Apps))
-
-	if len(config.Apps) == 0 {
-		fmt.Fprintln(w)
-		printNoApps(w)
-		return nil
+	daemon := DaemonView{State: "ok", Apps: len(config.Apps)}
+	port := envDefault("SINGLESERVER_PORT", "8787")
+	if res, derr := http.Get("http://127.0.0.1:" + port + "/health"); derr != nil {
+		daemon.State = "unreachable"
+	} else {
+		_ = res.Body.Close()
 	}
 
-	containers, containerErr := runningAppContainers()
-	journal, _ := recentSingleServerJournal()
-	nameWidth := 0
-	for _, app := range config.Apps {
-		nameWidth = max(nameWidth, len(app.Name))
+	var views []AppView
+	if len(config.Apps) > 0 {
+		containers, containerErr := runningAppContainers()
+		journal, _ := recentSingleServerJournal()
+		views = make([]AppView, 0, len(config.Apps))
+		for _, app := range config.Apps {
+			depState, depDetail := lastDeployStatusFromJournal(app.Name, journal)
+			views = append(views, AppView{
+				Name:   app.Name,
+				State:  appRuntimeWord(app, containers, containerErr),
+				Deploy: deployView(depState, depDetail),
+				Health: healthView(app),
+			})
+		}
 	}
-	for _, app := range config.Apps {
-		fmt.Fprintln(w)
-		runtimeState, runtimeWord := appRuntimeState(app, containers, containerErr)
-		fmt.Fprintf(w, "%s %s%s%s\n", dot(runtimeState), bold(app.Name), strings.Repeat(" ", nameWidth-len(app.Name)+3), dim(runtimeWord))
+	out.statusReport(daemon, views)
+	return flushIfOwned(out, owned)
+}
 
-		deployState, deployText := deployDetail(lastDeployStatusFromJournal(app.Name, journal))
-		fmt.Fprintf(w, "    %s   %s %s\n", dim("deploy"), mark(deployState), deployText)
-
-		healthState, healthText := healthDetail(app)
-		fmt.Fprintf(w, "    %s   %s %s\n", dim("health"), mark(healthState), healthText)
+func flushIfOwned(out *Output, owned bool) error {
+	if owned {
+		return out.Flush()
 	}
 	return nil
 }
 
-func writeDaemonStatus(w io.Writer, appCount int) {
-	port := envDefault("SINGLESERVER_PORT", "8787")
-	state, word := stateOK, "ok"
-	if res, err := http.Get("http://127.0.0.1:" + port + "/health"); err != nil {
-		state, word = stateFail, "unreachable"
-	} else {
-		_ = res.Body.Close()
-	}
-	count := fmt.Sprintf("%d apps", appCount)
-	if appCount == 1 {
-		count = "1 app"
-	}
-	fmt.Fprintf(w, "%s  %s %s%s\n", dim("daemon"), dot(state), word, dim("    "+count))
-}
-
-// appRuntimeState reports whether the app's container is up, for the status
+// appRuntimeWord reports whether the app's container is up, for the status
 // header line. The full container name is intentionally omitted as noise.
-func appRuntimeState(app AppConfig, containers map[string]string, err error) (stateKind, string) {
+func appRuntimeWord(app AppConfig, containers map[string]string, err error) string {
 	if err != nil {
-		return stateMuted, "unknown"
+		return "unknown"
 	}
 	if _, ok := containerForApp(app.Name, containers); ok {
-		return stateOK, "running"
+		return "running"
 	}
-	return stateWarn, "stopped"
+	return "stopped"
 }
 
-func deployDetail(state, detail string) (stateKind, string) {
+func deployView(state, detail string) *DeployView {
 	switch state {
 	case "ok":
 		if ms := parseTotalMS(detail); ms > 0 {
-			return stateOK, "deployed in " + humanMS(ms)
+			return &DeployView{State: "ok", Detail: "deployed in " + humanMS(ms)}
 		}
-		return stateOK, "deployed"
+		return &DeployView{State: "ok", Detail: "deployed"}
 	case "failed":
-		return stateFail, "last deploy failed"
+		return &DeployView{State: "failed", Detail: "last deploy failed"}
 	default:
-		return stateMuted, "no recent deploy"
+		return &DeployView{State: "none", Detail: "no recent deploy"}
 	}
 }
 
-func healthDetail(app AppConfig) (stateKind, string) {
+func healthView(app AppConfig) *HealthView {
 	if strings.TrimSpace(app.Healthcheck) == "" {
-		return stateMuted, "no external healthcheck"
+		return &HealthView{State: "none"}
 	}
 	if err := checkURL(app.Healthcheck); err != nil {
-		return stateFail, trimScheme(app.Healthcheck) + " unreachable"
+		return &HealthView{State: "failed", URL: trimScheme(app.Healthcheck), Error: err.Error()}
 	}
-	return stateOK, trimScheme(app.Healthcheck)
-}
-
-func parseTotalMS(detail string) int64 {
-	const key = "total_ms="
-	idx := strings.Index(detail, key)
-	if idx < 0 {
-		return 0
-	}
-	rest := detail[idx+len(key):]
-	end := 0
-	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
-		end++
-	}
-	if end == 0 {
-		return 0
-	}
-	ms, err := strconv.ParseInt(rest[:end], 10, 64)
-	if err != nil {
-		return 0
-	}
-	return ms
-}
-
-func humanMS(ms int64) string {
-	if ms < 1000 {
-		return fmt.Sprintf("%dms", ms)
-	}
-	return fmt.Sprintf("%.1fs", float64(ms)/1000)
-}
-
-func printNoApps(w io.Writer) {
-	fmt.Fprintln(w, "No apps configured. Add your first one with:")
-	fmt.Fprintln(w, "  singleserver add https://github.com/owner/repo")
+	return &HealthView{State: "ok", URL: trimScheme(app.Healthcheck)}
 }
 
 func appSummaryStatus(app AppConfig, containers map[string]string, containerErr error, journal string) string {
@@ -594,7 +574,7 @@ func cliInspect(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	_, err = w.Write(body)
+	_, err = rawWriter(w).Write(body)
 	return err
 }
 
@@ -614,6 +594,7 @@ func cliLogs(args []string, w io.Writer) error {
 		return errors.New("usage: singleserver logs [app] [--follow] [--runtime] [--daemon]")
 	}
 
+	w = rawWriter(w)
 	filter := ""
 	if fs.NArg() == 1 {
 		filter = strings.TrimSpace(fs.Arg(0))
