@@ -36,15 +36,27 @@ Required values:
   `TAILSCALE_TAG`: OAuth client used to generate pre-authorized Tailscale auth
   keys for E2E hosts. `TAILSCALE_AUTHKEY` is still accepted as a fallback.
 - `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_WEBHOOK_SECRET`, and
-  `GITHUB_APP_PRIVATE_KEY_PATH`: credentials for a GitHub App installed on the
-  test repository.
-- `GITHUB_TEST_REPO`: repository used for test commits and deploys.
+  `GITHUB_APP_PRIVATE_KEY_PATH`: credentials for a dedicated GitHub App installed
+  on the test repository. The runner repoints this App's webhook, so use a test
+  App, not the production one.
+- `GITHUB_TEST_REPO`: repository used for test commits and deploys. The runner
+  creates it if missing.
+
+Optional values:
+
+- `TAILSCALE_API_TOKEN`: used to create the OAuth client/tag and for future
+  cleanup helpers.
+- `GITHUB_PUSH_TOKEN`: token `gh`/`git` use to create and push commits to
+  `GITHUB_TEST_REPO`. If omitted, the runner uses the currently authenticated
+  `gh` account.
 
 The runner expects local `curl`, `docker`, `gh`, `git`, `go`, `dig`, `openssl`,
 and `python3`.
 
 The local `.env`, generated work directory, and Tailscale state cache are
-ignored by git.
+ignored by git. To keep credentials outside the repo, set `E2E_ENV_FILE` to an
+absolute path and the runner loads that file instead of
+`test/e2e-local-real/.env`.
 
 ## Structure
 
