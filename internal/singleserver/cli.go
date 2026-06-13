@@ -229,10 +229,10 @@ func cliList(w io.Writer) error {
 	journal, _ := recentSingleServerJournal()
 
 	rows := [][]tcell{{
-		plainCell(bold("APP")),
-		plainCell(bold("STATUS")),
-		plainCell(bold("DOMAIN")),
-		plainCell(bold("REPO")),
+		cell("APP", bold("APP")),
+		cell("STATUS", bold("STATUS")),
+		cell("DOMAIN", bold("DOMAIN")),
+		cell("REPO", bold("REPO")),
 	}}
 	for _, app := range config.Apps {
 		word := listStateWord(appSummaryStatus(app, containers, containerErr, journal))

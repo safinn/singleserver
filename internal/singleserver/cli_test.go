@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"text/tabwriter"
@@ -218,6 +219,30 @@ func TestStatusShowsConfigAndFirstAppHintWhenEmpty(t *testing.T) {
 	}
 	if !strings.Contains(got, "singleserver add https://github.com/owner/repo") {
 		t.Fatalf("expected add hint, got:\n%s", got)
+	}
+}
+
+func TestWriteTableAlignsColumnsUnderColor(t *testing.T) {
+	prev := useColor
+	useColor = true
+	t.Cleanup(func() { useColor = prev })
+
+	var out bytes.Buffer
+	writeTable(&out, [][]tcell{
+		{cell("APP", bold("APP")), cell("STATUS", bold("STATUS"))},
+		{plainCell("userbase-homepage"), cell("● running", green("● running"))},
+		{plainCell("fullsend"), cell("● running", green("● running"))},
+	}, 2)
+
+	ansi := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+
+	// The second column must begin at the same visible offset on every row.
+	header := strings.Index(ansi.ReplaceAllString(lines[0], ""), "STATUS")
+	for _, line := range lines[1:] {
+		if got := strings.Index(ansi.ReplaceAllString(line, ""), "● running"); got != header {
+			t.Fatalf("second column misaligned: header at %d, row at %d:\n%s", header, got, ansi.ReplaceAllString(out.String(), ""))
+		}
 	}
 }
 
