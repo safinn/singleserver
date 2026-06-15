@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -30,7 +31,10 @@ func resolveBackupPath(appName string, value string) string {
 	return filepath.Join(backupRoot(), appName, value+".tar.gz")
 }
 
-func createStorageBackup(appName string, storagePath string, backupDir string) (StorageBackupResult, error) {
+func createStorageBackup(appName string, storagePath string, backupDir string, w io.Writer) (StorageBackupResult, error) {
+	progress := newBackupProgress(w)
+	defer progress.finish()
+
 	if _, err := os.Stat(storagePath); err != nil {
 		return StorageBackupResult{}, err
 	}
@@ -47,11 +51,11 @@ func createStorageBackup(appName string, storagePath string, backupDir string) (
 	}
 	defer os.RemoveAll(snapshotDir)
 
-	files, sqliteFiles, err := snapshotStorage(storagePath, snapshotDir)
+	files, sqliteFiles, err := snapshotStorage(storagePath, snapshotDir, progress)
 	if err != nil {
 		return StorageBackupResult{}, err
 	}
-	if err := writeTarGz(snapshotDir, backupPath); err != nil {
+	if err := writeTarGz(snapshotDir, backupPath, progress); err != nil {
 		return StorageBackupResult{}, err
 	}
 	return StorageBackupResult{Path: backupPath, Files: files, SQLiteFiles: sqliteFiles}, nil
@@ -74,7 +78,7 @@ func nextBackupPath(backupDir string, now time.Time) (string, error) {
 	return "", fmt.Errorf("could not allocate backup path for %s", backupID)
 }
 
-func snapshotStorage(source string, dest string) (int, int, error) {
+func snapshotStorage(source string, dest string, progress *backupProgress) (int, int, error) {
 	files := 0
 	sqliteFiles := 0
 	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
@@ -113,7 +117,7 @@ func snapshotStorage(source string, dest string) (int, int, error) {
 			files++
 			if isSQLiteDatabase(path) {
 				sqliteFiles++
-				if err := backupSQLiteDatabase(path, target); err != nil {
+				if err := backupSQLiteDatabase(path, target, info.Size(), progress); err != nil {
 					return err
 				}
 				return copyFileMetadata(path, target)
@@ -139,13 +143,41 @@ func isSQLiteDatabase(path string) bool {
 	return string(header) == "SQLite format 3\x00"
 }
 
-func backupSQLiteDatabase(source string, dest string) error {
+func backupSQLiteDatabase(source string, dest string, size int64, progress *backupProgress) error {
 	if _, err := commandOutputFunc(time.Second, "sqlite3", "-version"); err != nil {
 		return fmt.Errorf("sqlite3 is required to back up SQLite database %s: %w", source, err)
 	}
-	if _, err := commandOutputFunc(30*time.Second, "sqlite3", source, ".backup "+sqliteString(dest)); err != nil {
+	progress.phase("snapshot "+filepath.Base(source), size)
+
+	// sqlite3 .backup emits no progress, so estimate it by polling the growing
+	// destination file against the source size while the command runs.
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	if progress.enabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ticker := time.NewTicker(150 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case <-ticker.C:
+					if info, err := os.Stat(dest); err == nil {
+						progress.set(info.Size())
+					}
+				}
+			}
+		}()
+	}
+	_, err := commandOutputFunc(sqliteBackupTimeout(size), "sqlite3", source, ".backup "+sqliteString(dest))
+	close(done)
+	wg.Wait()
+	if err != nil {
 		return err
 	}
+	progress.set(size)
 	return nil
 }
 
@@ -184,7 +216,18 @@ func copyFileMetadata(source string, dest string) error {
 	return os.Chtimes(dest, info.ModTime(), info.ModTime())
 }
 
-func writeTarGz(sourceDir string, destPath string) error {
+func writeTarGz(sourceDir string, destPath string, progress *backupProgress) error {
+	var total int64
+	_ = filepath.WalkDir(sourceDir, func(_ string, entry os.DirEntry, walkErr error) error {
+		if walkErr == nil && entry.Type().IsRegular() {
+			if info, err := entry.Info(); err == nil {
+				total += info.Size()
+			}
+		}
+		return nil
+	})
+	progress.phase("archive", total)
+
 	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
@@ -232,7 +275,7 @@ func writeTarGz(sourceDir string, destPath string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(tarWriter, file); err != nil {
+		if _, err := io.Copy(tarWriter, &progressReader{r: file, p: progress}); err != nil {
 			_ = file.Close()
 			return err
 		}

@@ -31,7 +31,7 @@ func cliBackup(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	result, err := createStorageBackup(app.Name, storage.Path, filepath.Join(backupRoot(), app.Name))
+	result, err := createStorageBackup(app.Name, storage.Path, filepath.Join(backupRoot(), app.Name), w)
 	if err != nil {
 		return err
 	}
