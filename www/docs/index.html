@@ -222,7 +222,10 @@
             <div class="command" id="cmd-install">
                 <h4>Install or upgrade everything</h4>
                 <div class="code-wrapper">
-                    <pre class="code-block">curl -fsSL <span class="accent">https://singleserver.com/install.sh</span> | sh</pre>
+                    <pre class="code-block">curl -fsSL <span class="accent">https://singleserver.com/install.sh</span> | sh
+
+# or install the edge channel (latest main) instead of the latest release
+curl -fsSL <span class="accent">https://singleserver.com/install.sh</span> | SINGLESERVER_CHANNEL=edge sh</pre>
                 </div>
                 <p>Installs Docker, Kamal, Tailscale, cloudflared, sqlite3, the singleserver binary, the systemd daemon, a local Docker registry, and a deploy user for Kamal. Then it runs first-run setup: connecting Tailscale, Cloudflare, and GitHub, and finishing with doctor. Rerunning it is safe, since it skips what is already done.</p>
                 <ul class="option-list">

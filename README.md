@@ -53,7 +53,7 @@ The unit tests are plain `go test` with no setup, no network, and no build tags.
 
 ## Releases
 
-To cut a release, push a SemVer tag. That triggers `.github/workflows/release.yml`, which builds the binaries and publishes a GitHub Release with checksums and notes:
+To release a new version, push a SemVer tag. That triggers `.github/workflows/release.yml`, which builds the binaries and publishes a GitHub Release with checksums and notes:
 
 ```sh
 git tag -a v0.2.0 -m "…"
