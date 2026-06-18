@@ -83,6 +83,7 @@ func cliTailscaleConnect(args []string, w io.Writer) error {
 		return nil
 	}
 	writeCheck(w, "tailscale", "status", "ok", tailscaleStatusName(status))
+	reportTailscaleKeyExpiry(w, status)
 
 	if err := commandRunFunc(15*time.Second, "tailscale", "set", "--ssh"); err != nil {
 		writeCheck(w, "tailscale", "ssh", "pending", err.Error())
@@ -267,7 +268,7 @@ func doctorTailscale(w io.Writer, appCount int) bool {
 		return appCount == 0
 	}
 	writeCheck(w, "tailscale", "status", "ok", tailscaleStatusName(status))
-	doctorTailscaleKeyExpiry(w, status)
+	reportTailscaleKeyExpiry(w, status)
 
 	env, _ := loadServiceEnv()
 	publicURL := strings.TrimRight(env["SINGLESERVER_PUBLIC_URL"], "/")
@@ -300,11 +301,26 @@ func doctorTailscale(w io.Writer, appCount int) bool {
 	return true
 }
 
-// doctorTailscaleKeyExpiry warns when the node's key is set to expire. An expired
+// tailscaleAdminURL returns the admin-console page for this machine, so we can
+// link the user straight to the one-click "Disable key expiry" toggle.
+func tailscaleAdminURL(status *tailscaleStatus) string {
+	if status == nil || status.Self == nil {
+		return ""
+	}
+	for _, ip := range status.Self.TailscaleIPs {
+		if strings.Contains(ip, ".") && !strings.Contains(ip, ":") {
+			return "https://login.tailscale.com/admin/machines/" + ip
+		}
+	}
+	return ""
+}
+
+// reportTailscaleKeyExpiry warns when the node's key is set to expire. An expired
 // key drops the box off the tailnet, which kills Funnel webhooks and Tailscale
 // SSH, so deploys silently stop. Tagged nodes and nodes with key expiry disabled
-// never expire, and tailscale status reports that here.
-func doctorTailscaleKeyExpiry(w io.Writer, status *tailscaleStatus) {
+// never expire. The fix is one click in the admin console, so we link straight to
+// the machine. Used by both `connect tailscale` and `doctor`.
+func reportTailscaleKeyExpiry(w io.Writer, status *tailscaleStatus) {
 	if status == nil || status.Self == nil {
 		return
 	}
@@ -318,7 +334,10 @@ func doctorTailscaleKeyExpiry(w io.Writer, status *tailscaleStatus) {
 		return
 	}
 	days := int(time.Until(expiry).Hours() / 24)
+	detail := "disable key expiry so this box stays online"
+	if url := tailscaleAdminURL(status); url != "" {
+		detail += ": " + url
+	}
 	writeCheck(w, "tailscale", "key expiry", "pending",
-		fmt.Sprintf("expires %s (%dd)", expiry.Format("2006-01-02"), days),
-		"disable key expiry or tag the node so deploys keep working")
+		fmt.Sprintf("expires %s (%dd)", expiry.Format("2006-01-02"), days), detail)
 }

@@ -22,10 +22,17 @@ func TestDoctorTailscaleKeyExpiry(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			doctorTailscaleKeyExpiry(&buf, &tailscaleStatus{Self: c.self})
+			reportTailscaleKeyExpiry(&buf, &tailscaleStatus{Self: c.self})
 			if !strings.Contains(buf.String(), c.want) {
 				t.Fatalf("expected %q, got: %q", c.want, buf.String())
 			}
 		})
+	}
+
+	// An expiring node with a Tailscale IP gets a deep link to its admin page.
+	var linkBuf bytes.Buffer
+	reportTailscaleKeyExpiry(&linkBuf, &tailscaleStatus{Self: &tailscaleSelf{KeyExpiry: soon, TailscaleIPs: []string{"100.64.0.1"}}})
+	if !strings.Contains(linkBuf.String(), "login.tailscale.com/admin/machines/100.64.0.1") {
+		t.Fatalf("expected admin deep link, got: %q", linkBuf.String())
 	}
 }
