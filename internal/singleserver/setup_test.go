@@ -421,11 +421,7 @@ func stubCommandRun(t *testing.T) {
 func testTailscaleStatus(dnsName, hostName string) *tailscaleStatus {
 	return &tailscaleStatus{
 		BackendState: "Running",
-		Self: &struct {
-			DNSName      string   `json:"DNSName"`
-			HostName     string   `json:"HostName"`
-			TailscaleIPs []string `json:"TailscaleIPs"`
-		}{
+		Self: &tailscaleSelf{
 			DNSName:  dnsName,
 			HostName: hostName,
 		},

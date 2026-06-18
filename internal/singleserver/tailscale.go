@@ -20,13 +20,17 @@ type TailscaleState struct {
 	FunnelURL string `json:"funnel_url"`
 }
 
+type tailscaleSelf struct {
+	DNSName      string   `json:"DNSName"`
+	HostName     string   `json:"HostName"`
+	TailscaleIPs []string `json:"TailscaleIPs"`
+	KeyExpiry    string   `json:"KeyExpiry"`
+	Tags         []string `json:"Tags"`
+}
+
 type tailscaleStatus struct {
-	BackendState string `json:"BackendState"`
-	Self         *struct {
-		DNSName      string   `json:"DNSName"`
-		HostName     string   `json:"HostName"`
-		TailscaleIPs []string `json:"TailscaleIPs"`
-	} `json:"Self"`
+	BackendState string         `json:"BackendState"`
+	Self         *tailscaleSelf `json:"Self"`
 }
 
 var tailscaleFunnelReadyFunc = waitForTailscaleFunnelReady
@@ -263,6 +267,7 @@ func doctorTailscale(w io.Writer, appCount int) bool {
 		return appCount == 0
 	}
 	writeCheck(w, "tailscale", "status", "ok", tailscaleStatusName(status))
+	doctorTailscaleKeyExpiry(w, status)
 
 	env, _ := loadServiceEnv()
 	publicURL := strings.TrimRight(env["SINGLESERVER_PUBLIC_URL"], "/")
@@ -293,4 +298,27 @@ func doctorTailscale(w io.Writer, appCount int) bool {
 	}
 	writeCheck(w, "tailscale", "funnel", "ok", publicURL)
 	return true
+}
+
+// doctorTailscaleKeyExpiry warns when the node's key is set to expire. An expired
+// key drops the box off the tailnet, which kills Funnel webhooks and Tailscale
+// SSH, so deploys silently stop. Tagged nodes and nodes with key expiry disabled
+// never expire, and tailscale status reports that here.
+func doctorTailscaleKeyExpiry(w io.Writer, status *tailscaleStatus) {
+	if status == nil || status.Self == nil {
+		return
+	}
+	if len(status.Self.Tags) > 0 {
+		writeCheck(w, "tailscale", "key expiry", "ok", "disabled (tagged)")
+		return
+	}
+	expiry, err := time.Parse(time.RFC3339, strings.TrimSpace(status.Self.KeyExpiry))
+	if err != nil || expiry.IsZero() {
+		writeCheck(w, "tailscale", "key expiry", "ok", "disabled")
+		return
+	}
+	days := int(time.Until(expiry).Hours() / 24)
+	writeCheck(w, "tailscale", "key expiry", "pending",
+		fmt.Sprintf("expires %s (%dd)", expiry.Format("2006-01-02"), days),
+		"disable key expiry or tag the node so deploys keep working")
 }
