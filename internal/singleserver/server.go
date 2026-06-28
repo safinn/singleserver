@@ -39,6 +39,19 @@ type Repo struct {
 	DefaultBranch string `json:"default_branch"`
 }
 
+type DeploymentPayload struct {
+	Deployment struct {
+		ID          int64  `json:"id"`
+		SHA         string `json:"sha"`
+		Ref         string `json:"ref"`
+		Environment string `json:"environment"`
+	} `json:"deployment"`
+	Repository   Repo `json:"repository"`
+	Installation struct {
+		ID int64 `json:"id"`
+	} `json:"installation"`
+}
+
 func Run(logger *log.Logger) error {
 	stateDir := envDefault("SINGLESERVER_STATE_DIR", "/etc/singleserver")
 	github := NewGitHubClient(stateDir)
@@ -107,17 +120,21 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 
 	event := r.Header.Get("X-GitHub-Event")
 	delivery := r.Header.Get("X-GitHub-Delivery")
-	if event == "ping" {
+	switch event {
+	case "ping":
 		s.logger.Printf("[webhook:%s] ping", delivery)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "event": "ping"})
-		return
-	}
-	if event != "push" {
+	case "push":
+		s.handlePushEvent(w, body, delivery)
+	case "deployment":
+		s.handleDeploymentEvent(w, body, delivery)
+	default:
 		s.logger.Printf("[webhook:%s] ignored event=%s", delivery, event)
 		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "ignored": true, "reason": "event " + event})
-		return
 	}
+}
 
+func (s *Server) handlePushEvent(w http.ResponseWriter, body []byte, delivery string) {
 	var payload PushPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_json"})
@@ -127,27 +144,70 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "ignored": true, "reason": "empty push"})
 		return
 	}
-	config, err := LoadConfig(s.configPath)
-	if err != nil {
-		s.logger.Printf("[webhook:%s] config load failed: %v", delivery, err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "bad_config"})
+	config, ok := s.loadConfig(w, delivery)
+	if !ok {
 		return
 	}
 	app, branch, reason := config.AppForPush(&payload)
-	if app == nil {
-		s.logger.Printf("[webhook:%s] ignored %s@%s: %s", delivery, payload.Repository.FullName, payload.After, reason)
-		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "ignored": true, "reason": reason})
-		return
-	}
-
-	runID := s.deployManager.Enqueue(DeployRequest{
-		App:            *app,
+	label := payload.Repository.FullName + "@" + payload.After
+	s.dispatch(w, delivery, label, app, reason, DeployRequest{
 		Repo:           payload.Repository.FullName,
 		Branch:         branch,
 		SHA:            payload.After,
 		InstallationID: payload.Installation.ID,
 	})
-	s.logger.Printf("[webhook:%s] accepted %s@%s as %s", delivery, payload.Repository.FullName, payload.After, runID)
+}
+
+func (s *Server) handleDeploymentEvent(w http.ResponseWriter, body []byte, delivery string) {
+	var payload DeploymentPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_json"})
+		return
+	}
+	if payload.Deployment.SHA == "" {
+		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "ignored": true, "reason": "missing deployment sha"})
+		return
+	}
+	config, ok := s.loadConfig(w, delivery)
+	if !ok {
+		return
+	}
+	app, branch, reason := config.AppForDeployment(&payload)
+	label := fmt.Sprintf("%s@%s (env=%s)", payload.Repository.FullName, payload.Deployment.SHA, payload.Deployment.Environment)
+	s.dispatch(w, delivery, label, app, reason, DeployRequest{
+		Repo:           payload.Repository.FullName,
+		Branch:         branch,
+		SHA:            payload.Deployment.SHA,
+		InstallationID: payload.Installation.ID,
+		DeploymentID:   payload.Deployment.ID,
+		DedupeKey:      fmt.Sprintf("deployment:%d", payload.Deployment.ID),
+	})
+}
+
+func (s *Server) loadConfig(w http.ResponseWriter, delivery string) (*Config, bool) {
+	config, err := LoadConfig(s.configPath)
+	if err != nil {
+		s.logger.Printf("[webhook:%s] config load failed: %v", delivery, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "bad_config"})
+		return nil, false
+	}
+	return config, true
+}
+
+func (s *Server) dispatch(w http.ResponseWriter, delivery, label string, app *AppConfig, reason string, req DeployRequest) {
+	if app == nil {
+		s.logger.Printf("[webhook:%s] ignored %s: %s", delivery, label, reason)
+		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "ignored": true, "reason": reason})
+		return
+	}
+	req.App = *app
+	runID, accepted := s.deployManager.Enqueue(req)
+	if !accepted {
+		s.logger.Printf("[webhook:%s] duplicate %s, skipping", delivery, label)
+		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "ignored": true, "reason": "duplicate delivery"})
+		return
+	}
+	s.logger.Printf("[webhook:%s] accepted %s as %s", delivery, label, runID)
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "accepted": true, "run_id": runID})
 }
 
@@ -174,10 +234,11 @@ func (s *Server) handleSetupGitHubApp(w http.ResponseWriter, r *http.Request) {
 		"redirect_url":  s.publicURL + "/setup/callback",
 		"callback_urls": []string{s.publicURL + "/setup/callback"},
 		"default_permissions": map[string]string{
-			"contents": "read",
-			"statuses": "write",
+			"contents":    "read",
+			"statuses":    "write",
+			"deployments": "write",
 		},
-		"default_events": []string{"push"},
+		"default_events": []string{"push", "deployment"},
 	}
 	manifestJSON, _ := json.Marshal(manifest)
 	state := s.setupToken

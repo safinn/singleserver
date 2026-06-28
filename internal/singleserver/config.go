@@ -26,6 +26,8 @@ type AppConfig struct {
 	Repo            string         `yaml:"repo"`
 	Name            string         `yaml:"name"`
 	Branch          string         `yaml:"branch"`
+	Trigger         string         `yaml:"trigger,omitempty"`
+	Environment     string         `yaml:"environment,omitempty"`
 	RepoDir         string         `yaml:"path"`
 	Healthcheck     string         `yaml:"healthcheck"`
 	Hosts           []string       `yaml:"hosts"`
@@ -46,6 +48,13 @@ type StorageConfig struct {
 	Path  string `yaml:"path,omitempty"`
 	Mount string `yaml:"mount,omitempty"`
 }
+
+const (
+	TriggerPush       = "push"
+	TriggerDeployment = "deployment"
+)
+
+const defaultEnvironment = "production"
 
 func (a *AppConfig) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
@@ -81,6 +90,22 @@ func (a *AppConfig) Normalize() error {
 	}
 
 	a.Branch = strings.TrimSpace(a.Branch)
+
+	a.Trigger = strings.ToLower(strings.TrimSpace(a.Trigger))
+	if a.Trigger == "" {
+		a.Trigger = TriggerPush
+	}
+	if a.Trigger != TriggerPush && a.Trigger != TriggerDeployment {
+		return fmt.Errorf("invalid trigger for %s: %q (want %s or %s)", a.Repo, a.Trigger, TriggerPush, TriggerDeployment)
+	}
+	a.Environment = strings.TrimSpace(a.Environment)
+	if a.Trigger == TriggerDeployment && a.Environment == "" {
+		a.Environment = defaultEnvironment
+	}
+	if a.Trigger == TriggerPush && a.Environment != "" {
+		return fmt.Errorf("environment is only valid with trigger: %s (%s)", TriggerDeployment, a.Repo)
+	}
+
 	a.RepoDir = strings.TrimSpace(a.RepoDir)
 	if a.RepoDir == "" {
 		a.RepoDir = filepath.Join(reposRoot(), a.Name)
@@ -379,24 +404,43 @@ func (c *Config) AppForPush(payload *PushPayload) (*AppConfig, string, string) {
 	if branch == "" {
 		return nil, "", "unsupported push ref"
 	}
-	for i := range c.Apps {
-		app := &c.Apps[i]
-		if !strings.EqualFold(app.Repo, payload.Repository.FullName) {
-			continue
-		}
-		targetBranch := strings.TrimSpace(app.Branch)
-		if targetBranch == "" {
-			targetBranch = strings.TrimSpace(payload.Repository.DefaultBranch)
-		}
-		if targetBranch == "" {
-			return nil, branch, app.Repo + " default branch is missing"
-		}
-		if branch != targetBranch {
-			return nil, branch, fmt.Sprintf("%s:%s does not match %s", app.Repo, branch, targetBranch)
-		}
-		return app, branch, ""
+	app, ok := c.AppByRepo(payload.Repository.FullName)
+	if !ok {
+		return nil, branch, payload.Repository.FullName + " is not configured"
 	}
-	return nil, branch, payload.Repository.FullName + " is not configured"
+	if app.Trigger == TriggerDeployment {
+		return nil, branch, app.Repo + " deploys on deployment events, not push"
+	}
+	targetBranch := strings.TrimSpace(app.Branch)
+	if targetBranch == "" {
+		targetBranch = strings.TrimSpace(payload.Repository.DefaultBranch)
+	}
+	if targetBranch == "" {
+		return nil, branch, app.Repo + " default branch is missing"
+	}
+	if branch != targetBranch {
+		return nil, branch, fmt.Sprintf("%s:%s does not match %s", app.Repo, branch, targetBranch)
+	}
+	return app, branch, ""
+}
+
+func (c *Config) AppForDeployment(payload *DeploymentPayload) (*AppConfig, string, string) {
+	if payload == nil || payload.Repository.FullName == "" {
+		return nil, "", "missing repository"
+	}
+	env := strings.TrimSpace(payload.Deployment.Environment)
+	ref := strings.TrimSpace(payload.Deployment.Ref)
+	app, ok := c.AppByRepo(payload.Repository.FullName)
+	if !ok {
+		return nil, ref, payload.Repository.FullName + " is not configured"
+	}
+	if app.Trigger != TriggerDeployment {
+		return nil, ref, app.Repo + " deploys on push, not deployment events"
+	}
+	if !strings.EqualFold(env, app.Environment) {
+		return nil, ref, fmt.Sprintf("%s environment %q does not match %q", app.Repo, env, app.Environment)
+	}
+	return app, ref, ""
 }
 
 func branchFromRef(ref string) string {

@@ -25,6 +25,7 @@ type DeployManager struct {
 
 	mu     sync.Mutex
 	queues map[string]chan DeployRequest
+	seen   map[string]struct{}
 }
 
 type DeployRequest struct {
@@ -33,6 +34,8 @@ type DeployRequest struct {
 	Branch         string
 	SHA            string
 	InstallationID int64
+	DeploymentID   int64
+	DedupeKey      string
 	RunID          string
 }
 
@@ -44,15 +47,28 @@ func NewDeployManager(logger *log.Logger, github *GitHubClient) *DeployManager {
 		logger: logger,
 		github: github,
 		queues: map[string]chan DeployRequest{},
+		seen:   map[string]struct{}{},
 	}
 }
 
-func (m *DeployManager) Enqueue(req DeployRequest) string {
+const maxDedupeEntries = 1024
+
+func (m *DeployManager) Enqueue(req DeployRequest) (string, bool) {
 	if req.RunID == "" {
 		req.RunID = fmt.Sprintf("%s-%d", req.App.Name, time.Now().UnixMilli())
 	}
 
 	m.mu.Lock()
+	if req.DedupeKey != "" {
+		if _, ok := m.seen[req.DedupeKey]; ok {
+			m.mu.Unlock()
+			return "", false
+		}
+		if len(m.seen) >= maxDedupeEntries {
+			m.seen = map[string]struct{}{}
+		}
+		m.seen[req.DedupeKey] = struct{}{}
+	}
 	queue := m.queues[req.App.Name]
 	if queue == nil {
 		queue = make(chan DeployRequest, 32)
@@ -62,7 +78,7 @@ func (m *DeployManager) Enqueue(req DeployRequest) string {
 	m.mu.Unlock()
 
 	queue <- req
-	return req.RunID
+	return req.RunID, true
 }
 
 func (m *DeployManager) worker(appName string, queue <-chan DeployRequest) {
@@ -81,21 +97,36 @@ func (m *DeployManager) run(req DeployRequest) (DeployTiming, error) {
 		return DeployTiming{}, err
 	}
 
-	_ = m.github.CreateCommitStatus(req.Repo, req.SHA, token, "pending", "Single Server deploying "+req.App.Name)
+	m.reportStatus(req, token, "pending", "Single Server deploying "+req.App.Name)
 
 	timing, err := m.runKamal(req, token)
 	if err == nil {
 		err = m.runHealthcheck(req.App, req.RunID)
 	}
 	if err != nil {
-		_ = m.github.CreateCommitStatus(req.Repo, req.SHA, token, "failure", "Single Server deploy failed: "+err.Error())
+		m.reportStatus(req, token, "failure", "Single Server deploy failed: "+err.Error())
 		m.logger.Printf("[deploy:%s] failed after %dms: %v", req.RunID, time.Since(start).Milliseconds(), err)
 		return DeployTiming{}, err
 	}
 
-	_ = m.github.CreateCommitStatus(req.Repo, req.SHA, token, "success", fmt.Sprintf("Single Server deployed in %dms", timing.TotalMS))
+	m.reportStatus(req, token, "success", fmt.Sprintf("Single Server deployed in %dms", timing.TotalMS))
 	m.logger.Printf("[deploy:%s] success total_ms=%d", req.RunID, timing.TotalMS)
 	return timing, nil
+}
+
+func (m *DeployManager) reportStatus(req DeployRequest, token string, state string, description string) {
+	if req.DeploymentID != 0 {
+		_ = m.github.CreateDeploymentStatus(req.Repo, req.DeploymentID, token, deploymentState(state), description)
+		return
+	}
+	_ = m.github.CreateCommitStatus(req.Repo, req.SHA, token, state, description)
+}
+
+func deploymentState(commitState string) string {
+	if commitState == "pending" {
+		return "in_progress"
+	}
+	return commitState
 }
 
 type DeployTiming struct {

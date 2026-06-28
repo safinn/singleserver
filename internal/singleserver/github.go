@@ -43,6 +43,11 @@ type StatusRequest struct {
 	Context     string `json:"context"`
 }
 
+type DeploymentStatusRequest struct {
+	State       string `json:"state"`
+	Description string `json:"description"`
+}
+
 type RepositoryInstallation struct {
 	ID int64 `json:"id"`
 }
@@ -199,6 +204,17 @@ func (c *GitHubClient) CreateCommitStatus(repo string, sha string, token string,
 		Context:     "Single Server",
 	}
 	return c.request("POST", fmt.Sprintf("/repos/%s/statuses/%s", repo, sha), "Bearer "+token, body, nil)
+}
+
+func (c *GitHubClient) CreateDeploymentStatus(repo string, deploymentID int64, token string, state string, description string) error {
+	if len(description) > 140 {
+		description = description[:140]
+	}
+	body := DeploymentStatusRequest{
+		State:       state,
+		Description: description,
+	}
+	return c.request("POST", fmt.Sprintf("/repos/%s/deployments/%d/statuses", repo, deploymentID), "Bearer "+token, body, nil)
 }
 
 func (c *GitHubClient) RepositoryInstallationID(repo string) (int64, error) {
