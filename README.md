@@ -8,6 +8,12 @@
 
 <p>This README is for working on Single Server itself. For what it does and why, see <a href="https://singleserver.com">singleserver.com</a>. For the full manual, see the <a href="https://singleserver.com/docs/">docs</a>.</p>
 
+## Fork additions
+
+This is a fork of [dvassallo/singleserver](https://github.com/dvassallo/singleserver) that adds:
+
+- **Opt-in deployment trigger with a CI test gate** — an app can set `trigger: deployment` (with an optional `environment`, default production) to deploy on a GitHub deployment event instead of on push. A CI test gate and any environment approval run before the server deploys, while the daemon still pulls and deploys with its own short-lived installation token, so no CI credentials are involved.
+
 ## Quickstart
 
 SSH into any fresh Linux box:
